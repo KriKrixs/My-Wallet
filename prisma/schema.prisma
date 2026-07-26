@@ -1,0 +1,163 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String?
+  email     String   @unique
+  image     String?
+  role      String   @default("USER") // "ADMIN", "USER"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wallets   WalletUser[]
+  transfers WalletTransfer[]
+}
+
+model Wallet {
+  id         String   @id @default(uuid())
+  name       String
+  currency   String   @default("EUR")
+  isPersonal Boolean  @default(false)
+  ownerId    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users             WalletUser[]
+  revenues          Revenue[]
+  recurringExpenses RecurringExpense[]
+  installments      InstallmentPayment[]
+  budgets           BudgetEnvelope[]
+  transactions      Transaction[]
+  processedPayments ProcessedPayment[]
+  overrides         ExpenseOverride[]
+  transfersSent     WalletTransfer[]     @relation("SentTransfers")
+  transfersReceived WalletTransfer[]     @relation("ReceivedTransfers")
+}
+
+model WalletUser {
+  walletId String
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String // "OWNER", "FULL_ACCESS", "READ_ONLY"
+
+  @@id([walletId, userId])
+}
+
+model Revenue {
+  id        String   @id @default(uuid())
+  walletId  String
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  title     String
+  amount    Float
+  type      String   // "FIXED", "VARIABLE"
+  month     Int      // 1-12
+  year      Int      // e.g., 2026
+  date      DateTime @default(now())
+}
+
+model RecurringExpense {
+  id         String   @id @default(uuid())
+  walletId   String
+  wallet     Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  title      String
+  amount     Float
+  category   String
+  color      String   @default("blue")
+  dayOfMonth Int      // 1-31
+}
+
+model InstallmentPayment {
+  id          String   @id @default(uuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  title       String
+  totalAmount Float?
+  amount      Float    // Montant mensuel
+  category    String
+  color       String   @default("violet")
+  dayOfMonth  Int      // 1-31
+  startMonth  Int
+  startYear   Int
+  endMonth    Int
+  endYear     Int
+}
+
+model BudgetEnvelope {
+  id          String   @id @default(uuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  category    String   // ex: "Alimentation", "Essence", "Loisirs"
+  color       String   @default("teal")
+  limitAmount Float
+  month       Int
+  year        Int
+
+  @@unique([walletId, category, month, year])
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  walletId  String
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  title     String
+  amount    Float
+  category  String
+  color     String   @default("gray")
+  day       Int      // 1-31
+  month     Int      // 1-12
+  year      Int      // e.g., 2026
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model ProcessedPayment {
+  id        String   @id @default(uuid())
+  walletId  String
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  paymentId String
+  type      String   // "REVENUE", "RECURRING", "INSTALLMENT"
+  month     Int
+  year      Int
+  createdAt DateTime @default(now())
+
+  @@unique([walletId, paymentId, type, month, year])
+}
+
+model ExpenseOverride {
+  id        String   @id @default(uuid())
+  walletId  String
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  paymentId String
+  type      String   // "REVENUE", "RECURRING"
+  amount    Float    // Montant spécifique pour ce mois
+  month     Int      // 1-12
+  year      Int
+  createdAt DateTime @default(now())
+
+  @@unique([walletId, paymentId, type, month, year])
+}
+
+model WalletTransfer {
+  id             String   @id @default(uuid())
+  sourceWalletId String
+  sourceWallet   Wallet   @relation("SentTransfers", fields: [sourceWalletId], references: [id], onDelete: Cascade)
+  targetWalletId String
+  targetWallet   Wallet   @relation("ReceivedTransfers", fields: [targetWalletId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  title          String
+  amount         Float
+  isPercentage   Boolean  @default(false)
+  percentage     Float?
+  dayOfMonth     Int      // 1-31
+  month          Int      // 1-12
+  year           Int
+  createdAt      DateTime @default(now())
+}

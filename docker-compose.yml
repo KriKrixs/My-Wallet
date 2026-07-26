@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: my-wallet-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-mywallet}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-mywallet}"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  my-wallet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: my-wallet
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mywallet}?schema=public
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXT_PUBLIC_LDAP_ENABLED=${NEXT_PUBLIC_LDAP_ENABLED:-false}
+      - LDAP_URL=${LDAP_URL:-}
+      - LDAP_DOMAIN=${LDAP_DOMAIN:-}
+      - LDAP_BASE_DN=${LDAP_BASE_DN:-}
+      - LDAP_USERNAME_ATTRIBUTE=${LDAP_USERNAME_ATTRIBUTE:-sAMAccountName}
+      - LDAP_BIND_DN=${LDAP_BIND_DN:-}
+      - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD:-}
+    restart: always
+
+volumes:
+  postgres-data:
+    driver: local

@@ -1,0 +1,41 @@
+# ── Dépendances & build locaux ────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# ── Artefacts Next.js ─────────────────────────────────────────────────────────
+.next/
+out/
+
+# ── Base de données locale (NE JAMAIS embarquer dans l'image) ─────────────────
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+dev.db
+
+# ── Fichiers de secrets & config locale ───────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Git & IDE ─────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.iml
+
+# ── Outils de dev & tests ─────────────────────────────────────────────────────
+scripts/
+
+# ── Fichiers systèmes ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+
+# ── Docs ──────────────────────────────────────────────────────────────────────
+README.md
+AGENTS.md
+CLAUDE.md
