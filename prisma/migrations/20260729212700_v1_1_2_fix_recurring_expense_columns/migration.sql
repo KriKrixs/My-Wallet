@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "RecurringExpense" ADD COLUMN IF NOT EXISTS "startMonth" INTEGER,
+ADD COLUMN IF NOT EXISTS "startYear" INTEGER;
