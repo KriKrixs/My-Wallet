@@ -1406,14 +1406,15 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     };
   });
 
-  const totalEnvelopesBudgetCost = envelopeStats.reduce((acc, env) => {
-    if (env.hasLimit) {
-      return acc + (env.spent > env.limitAmount ? env.spent : env.limitAmount);
+  // Réservation du reliquat des plafonds d'enveloppes uniquement si non dépassé
+  const unspentEnvelopeLimits = envelopeStats.reduce((acc, env) => {
+    if (env.hasLimit && env.spent < env.limitAmount) {
+      return acc + (env.limitAmount - env.spent);
     }
-    return acc + env.spent;
+    return acc;
   }, 0);
 
-  const netSavings = totalRevenues - fixedExpenses - totalTransfersSent - totalEnvelopesBudgetCost - previousMonthDeficit + previousMonthSurplus;
+  const netSavings = totalRevenues - fixedExpenses - totalTransactions - unspentEnvelopeLimits - totalTransfersSent - previousMonthDeficit + previousMonthSurplus;
 
   return {
     userRole,
@@ -1435,7 +1436,7 @@ export async function getDashboardData(walletId: string, month: number, year: nu
       restToLive,
       totalTransactions,
       totalExpenses,
-      totalEnvelopesBudgetCost,
+      unspentEnvelopeLimits,
       netSavings,
       pointedRevenues,
       pointedFixedExpenses,

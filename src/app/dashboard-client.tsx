@@ -1520,7 +1520,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                 <Text size="xl" fw={800} c={data.summary.netSavings >= 0 ? "teal.3" : "red.4"}>
                   {data.summary.netSavings.toFixed(2)} €
                 </Text>
-                <Tooltip label="Déduit les charges fixes et le budget max de vos enveloppes (ou dépense réelle si le plafond est dépassé)">
+                <Tooltip label="Revenus totaux - Charges fixes - Dépenses courantes - Plafonds d'enveloppes (si non dépassés)">
                   <Text size="xs" c="dimmed" style={{ cursor: "help" }}>
                     {data.summary.netSavings >= 0 ? "Réservé selon enveloppes" : "Déficit prévisionnel"}
                   </Text>
