@@ -597,6 +597,38 @@ export async function addTransaction(
   return transaction;
 }
 
+export async function updateTransaction(
+  walletId: string,
+  id: string,
+  data: {
+    title: string;
+    amount: number;
+    category: string;
+    color: string;
+    day: number;
+    month: number;
+    year: number;
+    notes?: string;
+  }
+) {
+  await requireWalletAccess(walletId, "FULL_ACCESS");
+  const transaction = await db.transaction.update({
+    where: { id, walletId },
+    data: {
+      title: data.title,
+      amount: data.amount,
+      category: data.category,
+      color: data.color || "gray",
+      day: data.day,
+      month: data.month,
+      year: data.year,
+      notes: data.notes,
+    },
+  });
+  revalidatePath("/");
+  return transaction;
+}
+
 export async function deleteTransaction(walletId: string, id: string) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
   await db.transaction.delete({ where: { id, walletId } });

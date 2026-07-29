@@ -4,6 +4,33 @@ Toutes les modifications notables apportées au projet **MyWallet** seront consi
 
 ---
 
+## [v1.1.4] - 2026-07-29
+
+### ✏️ Édition des Dépenses Quotidiennes
+* **Modification des Dépenses Saisies (`updateTransaction`)** :
+  * Ajout du bouton d'édition (icône crayon bleu) dans le tableau de l'historique des dépenses.
+  * Pré-remplissage complet du modal (*Libellé, Montant, Catégorie, Jour du mois, Notes*) lors du clic sur modifier.
+  * Action serveur `updateTransaction` dédiée avec validation et réactualisation dynamique des calculs.
+
+---
+
+## [v1.1.2] - 2026-07-29
+
+### 📊 Ajustements des Statistiques & Calculs Budgétaires
+* **Regroupement des Statistiques par Nature** :
+  * Les charges fixes, crédits, échéances et virements sont désormais regroupés par **Catégorie exacte** (ex: *Logement, Abonnements, Crédits & Échéances*).
+  * Les dépenses quotidiennes sont regroupées par leur **Libellé en minuscules** (`title.toLowerCase()`).
+  * **Tri Décroissant par Pourcentage** : L'ensemble des postes de dépenses est trié par montant/pourcentage décroissant (`b.value - a.value`) du plus gros au plus petit.
+* **Formule Ajustée de la Capacité d'Épargne** :
+  * Calcul exact : `Revenus totaux - Charges fixes - Dépenses courantes - Plafonds d'enveloppes non dépassés`.
+  * Déduit uniquement le reliquat d'enveloppe non dépensé (`plafond - dépense`) pour éviter tout double compte lorsque le plafond est dépassé.
+
+### 🗄️ Migrations BDD (Prisma)
+* **Migration `20260729212700_v1_1_2_fix_recurring_expense_columns`** :
+  * Ajout des colonnes optionnelles `startMonth` et `startYear` sur la table `RecurringExpense`.
+
+---
+
 ## [v1.1.0] - 2026-07-29
 
 ### 🛒 Liste d'Achat (Wishlist & Projets d'Achat)

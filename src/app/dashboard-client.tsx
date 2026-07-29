@@ -38,6 +38,7 @@ import {
 import {
   IconWallet,
   IconPlus,
+  IconPencil,
   IconTrash,
   IconCheck,
   IconX,
@@ -81,6 +82,7 @@ import {
   saveBudgetEnvelope,
   deleteBudgetEnvelope,
   addTransaction,
+  updateTransaction,
   deleteTransaction,
   togglePaymentProcessed,
   createWallet,
@@ -381,96 +383,83 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     if (!data) return { items: [], totalRevenues: 0, totalExpenses: 0, unspent: 0 };
 
     const totalRevenues = data.summary?.totalRevenues || 0;
-    const items: { name: string; value: number; type: string; color: string }[] = [];
+    const rawItems: { name: string; value: number; type: string }[] = [];
 
-    const PRESET_COLORS = [
-      "#20c997", "#339af0", "#7950f2", "#f783ac", "#fd7e14",
-      "#40c057", "#fa5252", "#12b886", "#fab005", "#15aabf",
-      "#be4bdb", "#e64980", "#82c91e", "#fd7e14", "#4dabf7"
-    ];
+    // 1. Charges Fixes, Crédits & Échéances : regroupés par CATÉGORIE
+    const fixedCategoryMap: { [cat: string]: number } = {};
 
-    let colorIdx = 0;
-
-    // 1. Dépenses par Enveloppe (montant dépensé env.spent)
-    if (data.envelopeStats) {
-      data.envelopeStats.forEach((env: any) => {
-        if (env.spent > 0) {
-          items.push({
-            name: `Enveloppe: ${env.category}`,
-            value: Math.round(env.spent * 100) / 100,
-            type: "Enveloppe",
-            color: PRESET_COLORS[colorIdx % PRESET_COLORS.length],
-          });
-          colorIdx++;
+    if (data.recurring) {
+      data.recurring.forEach((r: any) => {
+        if (r.amount > 0) {
+          const cat = (r.category || "Charges").trim();
+          fixedCategoryMap[cat] = (fixedCategoryMap[cat] || 0) + r.amount;
         }
       });
     }
 
-    // 2. Dépenses quotidiennes par Libellé (lowercased)
+    if (data.installments) {
+      data.installments.forEach((i: any) => {
+        if (i.amount > 0) {
+          const cat = (i.category || "Crédits & Échéances").trim();
+          fixedCategoryMap[cat] = (fixedCategoryMap[cat] || 0) + i.amount;
+        }
+      });
+    }
+
+    if (data.transfersSent) {
+      data.transfersSent.forEach((t: any) => {
+        if (t.amount > 0) {
+          const cat = "Virements émis";
+          fixedCategoryMap[cat] = (fixedCategoryMap[cat] || 0) + t.amount;
+        }
+      });
+    }
+
+    Object.entries(fixedCategoryMap).forEach(([catName, sumAmount]) => {
+      if (sumAmount > 0) {
+        rawItems.push({
+          name: catName,
+          value: Math.round(sumAmount * 100) / 100,
+          type: "Charge / Crédit (Catégorie)",
+        });
+      }
+    });
+
+    // 2. Dépenses Quotidiennes : regroupées uniquement par LIBELLÉ en minuscules
     if (data.transactions) {
       const groupedTrx: { [label: string]: number } = {};
       data.transactions.forEach((t: any) => {
-        const lowerLabel = (t.title || "dépense").trim().toLowerCase();
-        groupedTrx[lowerLabel] = (groupedTrx[lowerLabel] || 0) + t.amount;
+        if (t.amount > 0) {
+          const lowerLabel = (t.title || "dépense").trim().toLowerCase();
+          groupedTrx[lowerLabel] = (groupedTrx[lowerLabel] || 0) + t.amount;
+        }
       });
 
       Object.entries(groupedTrx).forEach(([label, amount]) => {
         if (amount > 0) {
-          items.push({
+          rawItems.push({
             name: label,
             value: Math.round(amount * 100) / 100,
             type: "Dépense quotidienne",
-            color: PRESET_COLORS[colorIdx % PRESET_COLORS.length],
           });
-          colorIdx++;
         }
       });
     }
 
-    // 3. Charges récurrentes non nulles
-    if (data.recurring) {
-      data.recurring.forEach((r: any) => {
-        if (r.amount > 0) {
-          items.push({
-            name: `Charge: ${r.title.toLowerCase()}`,
-            value: Math.round(r.amount * 100) / 100,
-            type: "Charge fixe",
-            color: PRESET_COLORS[colorIdx % PRESET_COLORS.length],
-          });
-          colorIdx++;
-        }
-      });
-    }
+    // 3. TRI du plus grand au plus petit (pourcentage / montant)
+    rawItems.sort((a, b) => b.value - a.value);
 
-    // 4. Crédits & Paiements fractionnés
-    if (data.installments) {
-      data.installments.forEach((i: any) => {
-        if (i.amount > 0) {
-          items.push({
-            name: `Crédit: ${i.title.toLowerCase()}`,
-            value: Math.round(i.amount * 100) / 100,
-            type: "Échéance",
-            color: PRESET_COLORS[colorIdx % PRESET_COLORS.length],
-          });
-          colorIdx++;
-        }
-      });
-    }
+    // 4. Attribution des couleurs après tri
+    const PRESET_COLORS = [
+      "#20c997", "#339af0", "#7950f2", "#f783ac", "#fd7e14",
+      "#40c057", "#fa5252", "#12b886", "#fab005", "#15aabf",
+      "#be4bdb", "#e64980", "#82c91e", "#4dabf7", "#e8590c"
+    ];
 
-    // 5. Virements émis
-    if (data.transfersSent) {
-      data.transfersSent.forEach((t: any) => {
-        if (t.amount > 0) {
-          items.push({
-            name: `Virement: ${t.title.toLowerCase()}`,
-            value: Math.round(t.amount * 100) / 100,
-            type: "Virement émis",
-            color: PRESET_COLORS[colorIdx % PRESET_COLORS.length],
-          });
-          colorIdx++;
-        }
-      });
-    }
+    const items = rawItems.map((item, idx) => ({
+      ...item,
+      color: PRESET_COLORS[idx % PRESET_COLORS.length],
+    }));
 
     const totalExpenses = items.reduce((acc, item) => acc + item.value, 0);
     const unspent = Math.max(0, totalRevenues - totalExpenses);
@@ -599,6 +588,36 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const [inviteEmail, setInviteEmail] = useState("");
   const [searchMemberQuery, setSearchMemberQuery] = useState("");
   const [inviteRole, setInviteRole] = useState<PermissionLevel>("FULL_ACCESS");
+
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+
+  const handleOpenAddTransaction = () => {
+    setFormErrors({});
+    setEditingTxId(null);
+    setTrxTitle("");
+    setTrxAmount(25);
+    setTrxCategory("Alimentation");
+    setTrxColor("teal");
+    setTrxDay(new Date().getDate());
+    setTrxMonth(month === 0 ? new Date().getMonth() + 1 : month);
+    setTrxYear(year);
+    setTrxNotes("");
+    setTransactionModal(true);
+  };
+
+  const handleOpenEditTransaction = (t: any) => {
+    setFormErrors({});
+    setEditingTxId(t.id);
+    setTrxTitle(t.title);
+    setTrxAmount(t.amount);
+    setTrxCategory(t.category);
+    setTrxColor(t.color || "teal");
+    setTrxDay(t.day);
+    setTrxMonth(t.month);
+    setTrxYear(t.year);
+    setTrxNotes(t.notes || "");
+    setTransactionModal(true);
+  };
 
   const [searchTx, setSearchTx] = useState("");
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
@@ -1090,17 +1109,31 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     }
 
     try {
-      await addTransaction(activeWalletId, {
-        title: trxTitle,
-        amount: parseAmount(trxAmount),
-        category: trxCategory,
-        color: trxColor,
-        day: Number(trxDay),
-        month: trxMonth,
-        year: trxYear,
-        notes: trxNotes,
-      });
+      if (editingTxId) {
+        await updateTransaction(activeWalletId, editingTxId, {
+          title: trxTitle,
+          amount: parseAmount(trxAmount),
+          category: trxCategory,
+          color: trxColor,
+          day: Number(trxDay),
+          month: trxMonth,
+          year: trxYear,
+          notes: trxNotes,
+        });
+      } else {
+        await addTransaction(activeWalletId, {
+          title: trxTitle,
+          amount: parseAmount(trxAmount),
+          category: trxCategory,
+          color: trxColor,
+          day: Number(trxDay),
+          month: trxMonth,
+          year: trxYear,
+          notes: trxNotes,
+        });
+      }
       setTransactionModal(false);
+      setEditingTxId(null);
       setTrxTitle("");
       setTrxNotes("");
       if (month !== trxMonth || year !== trxYear) {
@@ -2589,11 +2622,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   Historique des Dépenses ({getMonthLabel(month)} {year})
                 </Title>
                 {!isReadOnly && (
-                  <Button variant="gradient" gradient={{ from: "teal", to: "cyan" }} leftSection={<IconPlus size={16} />} onClick={() => {
-                    setTrxMonth(month === 0 ? new Date().getMonth() + 1 : month);
-                    setTrxYear(year);
-                    setTransactionModal(true);
-                  }}>
+                  <Button variant="gradient" gradient={{ from: "teal", to: "cyan" }} leftSection={<IconPlus size={16} />} onClick={handleOpenAddTransaction}>
                     Saisir une dépense
                   </Button>
                 )}
@@ -2640,9 +2669,14 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                         </Table.Td>
                         {!isReadOnly && (
                           <Table.Td>
-                            <ActionIcon color="red" variant="subtle" onClick={() => deleteTransaction(activeWalletId, t.id).then(loadData)}>
-                              <IconTrash size={16} />
-                            </ActionIcon>
+                            <Group gap={4}>
+                              <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditTransaction(t)}>
+                                <IconPencil size={16} />
+                              </ActionIcon>
+                              <ActionIcon color="red" variant="subtle" onClick={() => deleteTransaction(activeWalletId, t.id).then(loadData)}>
+                                <IconTrash size={16} />
+                              </ActionIcon>
+                            </Group>
                           </Table.Td>
                         )}
                       </Table.Tr>
@@ -3531,26 +3565,68 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
       </Modal>
 
       {/* Modal Dépense Quotidienne */}
-      <Modal opened={transactionModal} onClose={() => setTransactionModal(false)} title="Saisir une Dépense" centered>
-        <Stack gap="md">
-          <TextInput label="Libellé de la dépense" placeholder="ex: Courses Carrefour, Plein d'essence..." value={trxTitle} onChange={(e) => setTrxTitle(e.target.value)} error={formErrors.trxTitle} />
-          <NumberInput
-            label="Montant (€)"
-            value={trxAmount}
-            onChange={(val) => setTrxAmount(val)}
-            min={0}
-            decimalScale={2}
-            decimalSeparator=","
-            allowNegative={false}
-            error={formErrors.trxAmount}
-          />
-          <CategorySelect label="Catégorie (identique à l'enveloppe si applicable)" value={trxCategory} onChange={setTrxCategory} existingCategories={data?.categories} error={formErrors.trxCategory} />
-          <NumberInput label="Jour du mois" value={trxDay} onChange={(val) => setTrxDay(typeof val === "number" ? val : "")} min={1} max={31} error={formErrors.trxDay} />
-          <TextInput label="Notes optionnelles" placeholder="Détails supplémentaires..." value={trxNotes} onChange={(e) => setTrxNotes(e.target.value)} />
-          <Button color="teal" fullWidth onClick={handleAddTransaction}>
-            Enregistrer la dépense
-          </Button>
-        </Stack>
+      <Modal
+        opened={transactionModal}
+        onClose={() => {
+          setTransactionModal(false);
+          setEditingTxId(null);
+          setFormErrors({});
+        }}
+        title={editingTxId ? "Modifier la Dépense" : "Saisir une Dépense"}
+        centered
+      >
+        <form onSubmit={(e) => { e.preventDefault(); handleAddTransaction(); }}>
+          <Stack gap="md">
+            <TextInput
+              label="Libellé de la dépense"
+              placeholder="ex: Courses Carrefour, Plein d'essence..."
+              value={trxTitle}
+              onChange={(e) => {
+                setTrxTitle(e.target.value);
+                if (formErrors.trxTitle) setFormErrors((prev) => ({ ...prev, trxTitle: "" }));
+              }}
+              error={formErrors.trxTitle}
+            />
+            <NumberInput
+              label="Montant (€)"
+              value={trxAmount}
+              onChange={(val) => {
+                setTrxAmount(val);
+                if (formErrors.trxAmount) setFormErrors((prev) => ({ ...prev, trxAmount: "" }));
+              }}
+              min={0}
+              decimalScale={2}
+              decimalSeparator=","
+              allowNegative={false}
+              error={formErrors.trxAmount}
+            />
+            <CategorySelect
+              label="Catégorie (identique à l'enveloppe si applicable)"
+              value={trxCategory}
+              onChange={(val) => {
+                setTrxCategory(val);
+                if (formErrors.trxCategory) setFormErrors((prev) => ({ ...prev, trxCategory: "" }));
+              }}
+              existingCategories={data?.categories}
+              error={formErrors.trxCategory}
+            />
+            <NumberInput
+              label="Jour du mois"
+              value={trxDay}
+              onChange={(val) => {
+                setTrxDay(typeof val === "number" ? val : "");
+                if (formErrors.trxDay) setFormErrors((prev) => ({ ...prev, trxDay: "" }));
+              }}
+              min={1}
+              max={31}
+              error={formErrors.trxDay}
+            />
+            <TextInput label="Notes optionnelles" placeholder="Détails supplémentaires..." value={trxNotes} onChange={(e) => setTrxNotes(e.target.value)} />
+            <Button color="teal" fullWidth type="submit">
+              {editingTxId ? "Mettre à jour la dépense" : "Enregistrer la dépense"}
+            </Button>
+          </Stack>
+        </form>
       </Modal>
 
       {/* Modal Confirmation de Suppression de Portefeuille */}
