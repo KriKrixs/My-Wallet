@@ -20,6 +20,7 @@ import {
   Group,
   Loader,
   Center,
+  SegmentedControl,
 } from "@mantine/core";
 import {
   IconWallet,
@@ -28,8 +29,11 @@ import {
   IconLogin,
   IconShieldLock,
   IconUserCheck,
+  IconUserPlus,
+  IconCheck,
 } from "@tabler/icons-react";
 import { checkLdapEnabled } from "@/lib/actions/auth-config";
+import { registerLocalUser } from "@/lib/actions/auth-local";
 
 const mockUsers = [
   { label: "Kylian (Propriétaire)", value: "kylian@example.com", name: "Kylian" },
@@ -39,11 +43,20 @@ const mockUsers = [
 
 export default function LoginPage() {
   const [isLdapEnabled, setIsLdapEnabled] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
 
-  // LDAP form state
+  // Login form state
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [ldapError, setLdapError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
+
+  // Register form state
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirmPassword, setRegConfirmPassword] = useState("");
+  const [regErrors, setRegErrors] = useState<Record<string, string>>({});
 
   // Dev mock state
   const [selectedMockUser, setSelectedMockUser] = useState("kylian@example.com");
@@ -54,15 +67,29 @@ export default function LoginPage() {
     checkLdapEnabled().then((enabled) => setIsLdapEnabled(enabled));
   }, []);
 
-  const handleLdapLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password) return;
+    setAuthError(null);
+    setAuthSuccess(null);
+
+    const u = username.trim();
+    if (!u && !password) {
+      setAuthError("Veuillez saisir votre identifiant et votre mot de passe.");
+      return;
+    }
+    if (!u) {
+      setAuthError("Veuillez saisir votre identifiant ou adresse e-mail.");
+      return;
+    }
+    if (!password) {
+      setAuthError("Veuillez saisir votre mot de passe.");
+      return;
+    }
 
     setLoading(true);
-    setLdapError(null);
 
     const res = await signIn("active-directory", {
-      username: username.trim(),
+      username: u,
       password,
       redirect: false,
     });
@@ -70,15 +97,61 @@ export default function LoginPage() {
     setLoading(false);
 
     if (res?.error) {
-      // NextAuth encode l'erreur dans l'URL, on la décode
-      let msg = "Identifiants incorrects ou serveur Active Directory inaccessible.";
+      let msg = "Identifiants incorrects.";
       try {
         const decoded = decodeURIComponent(res.error);
         if (decoded && decoded !== "CredentialsSignin") msg = decoded;
       } catch (_) {}
-      setLdapError(msg);
+      setAuthError(msg);
     } else if (res?.ok) {
       window.location.href = "/";
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(null);
+    setRegErrors({});
+
+    const errors: Record<string, string> = {};
+    if (!regName.trim()) errors.regName = "Le nom complet est obligatoire.";
+    if (!regEmail.trim() || !regEmail.includes("@")) errors.regEmail = "Veuillez saisir une adresse e-mail valide.";
+    if (!regPassword || regPassword.length < 6) errors.regPassword = "Le mot de passe doit contenir au moins 6 caractères.";
+    if (regPassword !== regConfirmPassword) errors.regConfirmPassword = "Les mots de passe ne correspondent pas.";
+
+    if (Object.keys(errors).length > 0) {
+      setRegErrors(errors);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await registerLocalUser({
+        name: regName,
+        email: regEmail,
+        password: regPassword,
+      });
+
+      // Tentative de connexion automatique après inscription réussie
+      const res = await signIn("active-directory", {
+        username: regEmail.trim(),
+        password: regPassword,
+        redirect: false,
+      });
+
+      setLoading(false);
+
+      if (res?.ok) {
+        window.location.href = "/";
+      } else {
+        setAuthSuccess("Votre compte a été créé avec succès ! Vous pouvez maintenant vous connecter.");
+        setUsername(regEmail.trim());
+        setMode("LOGIN");
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setAuthError(err?.message || "Une erreur est survenue lors de l'création du compte.");
     }
   };
 
@@ -129,7 +202,7 @@ export default function LoginPage() {
           }}
         >
           {/* Header */}
-          <Stack align="center" gap="xs" mb="xl">
+          <Stack align="center" gap="xs" mb="lg">
             <ThemeIcon
               size={64}
               radius="xl"
@@ -152,123 +225,234 @@ export default function LoginPage() {
             </Text>
           </Stack>
 
-          {isLdapEnabled === null && (
+          {isLdapEnabled === null ? (
             <Center py="xl">
               <Loader color="teal" type="dots" />
             </Center>
-          )}
-
-          {/* ── MODE PRODUCTION : formulaire LDAP ── */}
-          {isLdapEnabled === true && (
-            <form onSubmit={handleLdapLogin}>
-              <Stack gap="md">
-                {ldapError && (
-                  <Alert icon={<IconAlertCircle size={16} />} color="red" radius="md" variant="light">
-                    {ldapError}
-                  </Alert>
-                )}
-
-                <TextInput
-                  id="ldap-username"
-                  label="Identifiant Active Directory"
-                  placeholder="utilisateur ou utilisateur@domaine.local"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  leftSection={<IconServer size={16} />}
-                  size="md"
-                  radius="md"
-                  styles={{
-                    input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
-                    label: { color: "rgba(255,255,255,0.7)", marginBottom: 6 },
-                  }}
-                  required
-                />
-
-                <PasswordInput
-                  id="ldap-password"
-                  label="Mot de passe"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  size="md"
-                  radius="md"
-                  styles={{
-                    input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
-                    label: { color: "rgba(255,255,255,0.7)", marginBottom: 6 },
-                  }}
-                  required
-                />
-
-                <Button
-                  id="ldap-login-btn"
-                  type="submit"
-                  size="md"
-                  fullWidth
-                  loading={loading}
-                  variant="gradient"
-                  gradient={{ from: "teal.7", to: "cyan.5", deg: 135 }}
-                  leftSection={<IconLogin size={18} />}
-                  radius="md"
-                  mt={4}
-                  style={{ fontWeight: 600 }}
-                >
-                  Se connecter via Active Directory
-                </Button>
-              </Stack>
-            </form>
-          )}
-
-          {/* ── MODE DÉVELOPPEMENT : liste mockée ── */}
-          {isLdapEnabled === false && (
+          ) : (
             <Stack gap="md">
-              <Paper
-                p="md"
-                radius="md"
-                style={{ backgroundColor: "rgba(255, 193, 7, 0.06)", border: "1px solid rgba(255,193,7,0.2)" }}
-              >
-                <Group gap="xs" mb="sm">
-                  <IconShieldLock size={18} color="#fcc419" />
-                  <Text size="xs" fw={700} c="yellow.4">
-                    Comptes de test — Mode Développement Local
-                  </Text>
-                </Group>
+              {/* Segmented Control Mode Connexion / Inscription */}
+              <SegmentedControl
+                fullWidth
+                size="sm"
+                color="teal"
+                value={mode}
+                onChange={(val) => {
+                  setMode(val as "LOGIN" | "REGISTER");
+                  setAuthError(null);
+                  setAuthSuccess(null);
+                }}
+                data={[
+                  { label: "Se Connecter", value: "LOGIN" },
+                  { label: "Créer un compte", value: "REGISTER" },
+                ]}
+              />
 
-                <Stack gap="xs">
-                  <Select
-                    id="mock-user-select"
-                    label="Choisir un profil"
-                    data={mockUsers}
-                    value={selectedMockUser}
-                    onChange={(val) => val && setSelectedMockUser(val)}
-                    size="sm"
-                    radius="md"
-                    styles={{
-                      input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
-                      label: { color: "rgba(255,255,255,0.6)", marginBottom: 4 },
-                    }}
-                  />
+              {authError && (
+                <Alert icon={<IconAlertCircle size={16} />} color="red" radius="md" variant="light">
+                  {authError}
+                </Alert>
+              )}
 
-                  <Button
-                    id="mock-login-btn"
-                    size="sm"
-                    fullWidth
-                    variant="gradient"
-                    gradient={{ from: "teal.7", to: "cyan.5", deg: 135 }}
-                    leftSection={<IconUserCheck size={18} />}
-                    loading={loading}
-                    onClick={handleMockLogin}
+              {authSuccess && (
+                <Alert icon={<IconCheck size={16} />} color="teal" radius="md" variant="light">
+                  {authSuccess}
+                </Alert>
+              )}
+
+              {/* ── FORMULAIRE DE CONNEXION (LDAP OU LOCAL) ── */}
+              {mode === "LOGIN" && (
+                <form onSubmit={handleLogin}>
+                  <Stack gap="md">
+                    <TextInput
+                      id="login-username"
+                      label="Identifiant ou E-mail"
+                      placeholder="votre_compte ou email@exemple.com"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      leftSection={<IconServer size={16} />}
+                      size="sm"
+                      radius="md"
+                      styles={{
+                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                      }}
+                      required
+                    />
+
+                    <PasswordInput
+                      id="login-password"
+                      label="Mot de passe"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      size="sm"
+                      radius="md"
+                      styles={{
+                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                      }}
+                      required
+                    />
+
+                    <Button
+                      id="login-btn"
+                      type="submit"
+                      size="md"
+                      fullWidth
+                      loading={loading}
+                      variant="gradient"
+                      gradient={{ from: "teal.7", to: "cyan.5", deg: 135 }}
+                      leftSection={<IconLogin size={18} />}
+                      radius="md"
+                      mt={4}
+                      style={{ fontWeight: 600 }}
+                    >
+                      Se connecter
+                    </Button>
+                  </Stack>
+                </form>
+              )}
+
+              {/* ── FORMULAIRE D'INSCRIPTION COMPTE LOCAL ── */}
+              {mode === "REGISTER" && (
+                <form onSubmit={handleRegister}>
+                  <Stack gap="sm">
+                    <TextInput
+                      label="Nom complet"
+                      placeholder="ex: Jean Dupont"
+                      value={regName}
+                      onChange={(e) => {
+                        setRegName(e.target.value);
+                        if (regErrors.regName) setRegErrors((prev) => ({ ...prev, regName: "" }));
+                      }}
+                      error={regErrors.regName}
+                      size="sm"
+                      radius="md"
+                      styles={{
+                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                      }}
+                      required
+                    />
+
+                    <TextInput
+                      label="Adresse e-mail"
+                      placeholder="jean.dupont@exemple.com"
+                      value={regEmail}
+                      onChange={(e) => {
+                        setRegEmail(e.target.value);
+                        if (regErrors.regEmail) setRegErrors((prev) => ({ ...prev, regEmail: "" }));
+                      }}
+                      error={regErrors.regEmail}
+                      size="sm"
+                      radius="md"
+                      styles={{
+                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                      }}
+                      required
+                    />
+
+                    <PasswordInput
+                      label="Mot de passe (6 caractères min)"
+                      placeholder="••••••••"
+                      value={regPassword}
+                      onChange={(e) => {
+                        setRegPassword(e.target.value);
+                        if (regErrors.regPassword) setRegErrors((prev) => ({ ...prev, regPassword: "" }));
+                      }}
+                      error={regErrors.regPassword}
+                      size="sm"
+                      radius="md"
+                      styles={{
+                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                      }}
+                      required
+                    />
+
+                    <PasswordInput
+                      label="Confirmer le mot de passe"
+                      placeholder="••••••••"
+                      value={regConfirmPassword}
+                      onChange={(e) => {
+                        setRegConfirmPassword(e.target.value);
+                        if (regErrors.regConfirmPassword) setRegErrors((prev) => ({ ...prev, regConfirmPassword: "" }));
+                      }}
+                      error={regErrors.regConfirmPassword}
+                      size="sm"
+                      radius="md"
+                      styles={{
+                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                      }}
+                      required
+                    />
+
+                    <Button
+                      type="submit"
+                      size="md"
+                      fullWidth
+                      loading={loading}
+                      variant="gradient"
+                      gradient={{ from: "teal.7", to: "cyan.5", deg: 135 }}
+                      leftSection={<IconUserPlus size={18} />}
+                      radius="md"
+                      mt="xs"
+                      style={{ fontWeight: 600 }}
+                    >
+                      Créer mon compte
+                    </Button>
+                  </Stack>
+                </form>
+              )}
+
+              {/* ── MODE DÉVELOPPEMENT LOCAL (OPTIONNEL) ── */}
+              {isLdapEnabled === false && (
+                <>
+                  <Divider color="rgba(255,255,255,0.08)" my="xs" />
+                  <Paper
+                    p="sm"
                     radius="md"
-                    style={{ fontWeight: 600 }}
+                    style={{ backgroundColor: "rgba(255, 193, 7, 0.05)", border: "1px solid rgba(255,193,7,0.15)" }}
                   >
-                    Se connecter avec ce profil
-                  </Button>
-                </Stack>
-              </Paper>
+                    <Group gap="xs" mb="xs">
+                      <IconShieldLock size={16} color="#fcc419" />
+                      <Text size="xs" fw={700} c="yellow.4">
+                        Mode Développeur — Connexion rapide
+                      </Text>
+                    </Group>
 
-              <Divider color="rgba(255,255,255,0.06)" />
-              <Text size="xs" c="dimmed" ta="center">
-                Passez <Text span c="teal.4" fw={600}>NEXT_PUBLIC_LDAP_ENABLED=&quot;true&quot;</Text> dans votre <Text span ff="monospace">.env</Text> pour activer la connexion Active Directory.
-              </Text>
+                    <Stack gap="xs">
+                      <Select
+                        id="mock-user-select"
+                        data={mockUsers}
+                        value={selectedMockUser}
+                        onChange={(val) => val && setSelectedMockUser(val)}
+                        size="xs"
+                        radius="md"
+                        styles={{
+                          input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                        }}
+                      />
+
+                      <Button
+                        id="mock-login-btn"
+                        size="xs"
+                        fullWidth
+                        variant="subtle"
+                        color="yellow"
+                        leftSection={<IconUserCheck size={16} />}
+                        loading={loading}
+                        onClick={handleMockLogin}
+                      >
+                        Tester avec ce profil de démo
+                      </Button>
+                    </Stack>
+                  </Paper>
+                </>
+              )}
             </Stack>
           )}
         </Paper>

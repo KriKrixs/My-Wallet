@@ -10,23 +10,29 @@ model User {
   id        String   @id @default(uuid())
   name      String?
   email     String   @unique
+  password  String?
   image     String?
   role      String   @default("USER") // "ADMIN", "USER"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  wallets   WalletUser[]
-  transfers WalletTransfer[]
+  wallets       WalletUser[]
+  transfers     WalletTransfer[]
+  wishlistItems WishlistItem[]
 }
 
 model Wallet {
-  id         String   @id @default(uuid())
-  name       String
-  currency   String   @default("EUR")
-  isPersonal Boolean  @default(false)
-  ownerId    String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                      String   @id @default(uuid())
+  name                    String
+  currency                String   @default("EUR")
+  isPersonal              Boolean  @default(false)
+  ownerId                 String
+  carryoverMode           String   @default("NONE") // "NONE", "NEXT_MONTH", "TARGET_WALLET"
+  carryoverTargetWalletId String?
+  carryoverTargetWallet   Wallet?  @relation("WalletCarryoverTarget", fields: [carryoverTargetWalletId], references: [id], onDelete: SetNull)
+  carryoverSources        Wallet[] @relation("WalletCarryoverTarget")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   users             WalletUser[]
   revenues          Revenue[]
@@ -38,6 +44,7 @@ model Wallet {
   overrides         ExpenseOverride[]
   transfersSent     WalletTransfer[]     @relation("SentTransfers")
   transfersReceived WalletTransfer[]     @relation("ReceivedTransfers")
+  wishlistItems     WishlistItem[]
 }
 
 model WalletUser {
@@ -71,6 +78,8 @@ model RecurringExpense {
   category   String
   color      String   @default("blue")
   dayOfMonth Int      // 1-31
+  startMonth Int?
+  startYear  Int?
 }
 
 model InstallmentPayment {
@@ -156,8 +165,27 @@ model WalletTransfer {
   amount         Float
   isPercentage   Boolean  @default(false)
   percentage     Float?
+  isRecurring    Boolean  @default(true)
   dayOfMonth     Int      // 1-31
   month          Int      // 1-12
   year           Int
   createdAt      DateTime @default(now())
+}
+
+model WishlistItem {
+  id          String   @id @default(uuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  title       String
+  amount      Float
+  url         String?
+  category    String   @default("Général")
+  notes       String?
+  priority    String   @default("NORMAL") // URGENT, IMPORTANT, MAJOR, NORMAL, LOW
+  status      String   @default("PENDING") // PENDING, PURCHASED, CANCELLED
+  purchasedAt DateTime?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

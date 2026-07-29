@@ -59,6 +59,8 @@ CREATE TABLE "RecurringExpense" (
     "category" TEXT NOT NULL,
     "color" TEXT NOT NULL DEFAULT 'blue',
     "dayOfMonth" INTEGER NOT NULL,
+    "startMonth" INTEGER,
+    "startYear" INTEGER,
 
     CONSTRAINT "RecurringExpense_pkey" PRIMARY KEY ("id")
 );

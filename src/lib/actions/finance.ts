@@ -56,17 +56,48 @@ export async function getUserWallets() {
 
   const userWallets = await db.walletUser.findMany({
     where: { userId },
-    include: { wallet: true },
+    include: {
+      wallet: {
+        include: {
+          users: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+        },
+      },
+    },
   });
 
-  return userWallets.map((uw) => ({
-    id: uw.wallet.id,
-    name: uw.wallet.name,
-    currency: uw.wallet.currency,
-    isPersonal: uw.wallet.isPersonal,
-    role: uw.role as PermissionLevel,
-    isOwner: uw.wallet.ownerId === userId,
-  }));
+  return userWallets.map((uw) => {
+    const isOwner = uw.wallet.ownerId === userId;
+    const isPersonalForCurrentUser = uw.wallet.isPersonal && isOwner;
+
+    let displayName = uw.wallet.name;
+    if (uw.wallet.isPersonal && !isOwner) {
+      const ownerUser = uw.wallet.users.find((u) => u.userId === uw.wallet.ownerId)?.user;
+      let firstName = "Propriétaire";
+      if (ownerUser?.name && ownerUser.name.trim() !== "") {
+        firstName = ownerUser.name.trim().split(" ")[0];
+      } else if (ownerUser?.email) {
+        firstName = ownerUser.email.split("@")[0];
+      }
+      displayName = `Portefeuille de ${firstName}`;
+    }
+
+    return {
+      id: uw.wallet.id,
+      name: displayName,
+      currency: uw.wallet.currency,
+      isPersonal: isPersonalForCurrentUser,
+      role: uw.role as PermissionLevel,
+      isOwner,
+      carryoverMode: (uw.wallet.carryoverMode || "NONE") as "NONE" | "NEXT_MONTH" | "TARGET_WALLET",
+      carryoverTargetWalletId: uw.wallet.carryoverTargetWalletId,
+    };
+  });
 }
 
 export async function createWallet(name: string, currency = "EUR") {
@@ -294,17 +325,33 @@ export async function deleteRevenue(walletId: string, id: string) {
    RECURRING EXPENSES
    ========================================================================== */
 
-export async function getRecurringExpenses(walletId: string) {
+export async function getRecurringExpenses(walletId: string, month?: number, year?: number) {
   await requireWalletAccess(walletId, "READ_ONLY");
-  return db.recurringExpense.findMany({
+  const all = await db.recurringExpense.findMany({
     where: { walletId },
     orderBy: { dayOfMonth: "asc" },
+  });
+
+  if (!month || !year) return all;
+
+  return all.filter((r) => {
+    if (!r.startYear || !r.startMonth) return true;
+    const isAfterStart = r.startYear < year || (r.startYear === year && (month === 0 || r.startMonth <= month));
+    return isAfterStart;
   });
 }
 
 export async function addRecurringExpense(
   walletId: string,
-  data: { title: string; amount: number; category: string; color: string; dayOfMonth: number }
+  data: {
+    title: string;
+    amount: number;
+    category: string;
+    color: string;
+    dayOfMonth: number;
+    startMonth?: number;
+    startYear?: number;
+  }
 ) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
   const expense = await db.recurringExpense.create({
@@ -315,6 +362,8 @@ export async function addRecurringExpense(
       category: data.category,
       color: data.color || "blue",
       dayOfMonth: data.dayOfMonth,
+      startMonth: data.startMonth,
+      startYear: data.startYear,
     },
   });
   revalidatePath("/");
@@ -325,6 +374,27 @@ export async function deleteRecurringExpense(walletId: string, id: string) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
   await db.recurringExpense.delete({ where: { id, walletId } });
   revalidatePath("/");
+}
+
+export async function updateRecurringExpenseGlobal(
+  walletId: string,
+  id: string,
+  data: {
+    title?: string;
+    amount?: number;
+    category?: string;
+    dayOfMonth?: number;
+    startMonth?: number;
+    startYear?: number;
+  }
+) {
+  await requireWalletAccess(walletId, "FULL_ACCESS");
+  const updated = await db.recurringExpense.update({
+    where: { id, walletId },
+    data,
+  });
+  revalidatePath("/");
+  return updated;
 }
 
 /* ==========================================================================
@@ -541,7 +611,7 @@ export async function togglePaymentProcessed(
   walletId: string,
   data: {
     paymentId: string;
-    type: "REVENUE" | "RECURRING" | "INSTALLMENT";
+    type: "REVENUE" | "RECURRING" | "INSTALLMENT" | "TRANSFER";
     month: number;
     year: number;
     processed: boolean;
@@ -593,7 +663,7 @@ export async function setExpenseOverride(
   walletId: string,
   data: {
     paymentId: string;
-    type: "REVENUE" | "RECURRING";
+    type: "REVENUE" | "RECURRING" | "INSTALLMENT";
     amount: number;
     month: number;
     year: number;
@@ -629,7 +699,7 @@ export async function removeExpenseOverride(
   walletId: string,
   data: {
     paymentId: string;
-    type: "REVENUE" | "RECURRING";
+    type: "REVENUE" | "RECURRING" | "INSTALLMENT";
     month: number;
     year: number;
   }
@@ -669,19 +739,7 @@ export async function updateRevenueGlobal(
   return updated;
 }
 
-export async function updateRecurringExpenseGlobal(
-  walletId: string,
-  id: string,
-  data: { title?: string; amount?: number; category?: string; dayOfMonth?: number }
-) {
-  await requireWalletAccess(walletId, "FULL_ACCESS");
-  const updated = await db.recurringExpense.update({
-    where: { id, walletId },
-    data,
-  });
-  revalidatePath("/");
-  return updated;
-}
+
 
 export async function setDeficitOverride(
   walletId: string,
@@ -740,6 +798,7 @@ export async function createWalletTransfer(
     amount: number;
     isPercentage?: boolean;
     percentage?: number;
+    isRecurring?: boolean;
     dayOfMonth: number;
     month: number;
     year: number;
@@ -763,6 +822,7 @@ export async function createWalletTransfer(
       amount: data.amount,
       isPercentage: !!data.isPercentage,
       percentage: data.percentage || null,
+      isRecurring: data.isRecurring !== undefined ? !!data.isRecurring : true,
       dayOfMonth: data.dayOfMonth,
       month: data.month,
       year: data.year,
@@ -784,13 +844,169 @@ const MONTH_NAMES = [
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
 ];
 
-async function getPreviousMonthCarryover(walletId: string, month: number, year: number): Promise<{
+async function calculateWalletMonthlyNet(walletId: string, month: number, year: number): Promise<number> {
+  const [revenues, recurring, installments, transactions, overrides, rawTransfersSent, rawTransfersReceived, envelopes] = await Promise.all([
+    getRevenues(walletId, month, year),
+    getRecurringExpenses(walletId, month, year),
+    getInstallments(walletId, month, year),
+    getTransactions(walletId, month, year),
+    db.expenseOverride.findMany({ where: { walletId, year } }),
+    db.walletTransfer.findMany({
+      where: { sourceWalletId: walletId },
+      include: {
+        targetWallet: { select: { id: true, name: true } },
+        createdBy: { select: { name: true, email: true } },
+      },
+    }),
+    db.walletTransfer.findMany({
+      where: { targetWalletId: walletId },
+      include: {
+        sourceWallet: { select: { id: true, name: true } },
+        createdBy: { select: { name: true, email: true } },
+      },
+    }),
+    getBudgets(walletId, month, year),
+  ]);
+
+  const revTotal = revenues.reduce((acc, r) => {
+    const ov = overrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && o.month === month);
+    return acc + (ov ? ov.amount : r.amount);
+  }, 0);
+
+  const transfersSent = rawTransfersSent.filter((t) => {
+    if (!t.isRecurring) return t.month === month && t.year === year;
+    return t.year < year || (t.year === year && t.month <= month);
+  });
+
+  const transfersReceived = rawTransfersReceived.filter((t) => {
+    if (!t.isRecurring) return t.month === month && t.year === year;
+    return t.year < year || (t.year === year && t.month <= month);
+  });
+
+  const envLimitsSum = envelopes.reduce((acc, e) => acc + (e.limitAmount > 0 ? e.limitAmount : 0), 0);
+
+  let transfersReceivedTotal = 0;
+  for (const t of transfersReceived) {
+    let amt = t.amount;
+    if (t.isPercentage && t.percentage && t.percentage > 0) {
+      const [sRevenues, sRecurring, sInstallments, sOverrides] = await Promise.all([
+        getRevenues(t.sourceWalletId, month, year),
+        getRecurringExpenses(t.sourceWalletId, month, year),
+        getInstallments(t.sourceWalletId, month, year),
+        db.expenseOverride.findMany({ where: { walletId: t.sourceWalletId, year } }),
+      ]);
+      const sRev = sRevenues.reduce((acc, r) => {
+        const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && o.month === month);
+        return acc + (ov ? ov.amount : r.amount);
+      }, 0);
+      const sRec = sRecurring.reduce((acc, r) => {
+        const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === month);
+        return acc + (ov ? ov.amount : r.amount);
+      }, 0);
+      const sInst = sInstallments.reduce((acc, i) => {
+        const ov = sOverrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && o.month === month);
+        return acc + (ov ? ov.amount : i.amount);
+      }, 0);
+      const sBase = Math.max(0, sRev - (sRec + sInst) - envLimitsSum);
+      amt = Math.round((t.percentage / 100) * sBase * 100) / 100;
+    }
+    transfersReceivedTotal += amt;
+  }
+
+  let transfersSentTotal = 0;
+  for (const t of transfersSent) {
+    let amt = t.amount;
+    if (t.isPercentage && t.percentage && t.percentage > 0) {
+      const recTotal = recurring.reduce((acc, r) => {
+        const ov = overrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === month);
+        return acc + (ov ? ov.amount : r.amount);
+      }, 0);
+      const instTotal = installments.reduce((acc, i) => {
+        const ov = overrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && o.month === month);
+        return acc + (ov ? ov.amount : i.amount);
+      }, 0);
+      const base = Math.max(0, revTotal - (recTotal + instTotal) - envLimitsSum);
+      amt = Math.round((t.percentage / 100) * base * 100) / 100;
+    }
+    transfersSentTotal += amt;
+  }
+
+  const recTotal = recurring.reduce((acc, r) => {
+    const ov = overrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === month);
+    return acc + (ov ? ov.amount : r.amount);
+  }, 0);
+
+  const instTotal = installments.reduce((acc, i) => {
+    const ov = overrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && o.month === month);
+    return acc + (ov ? ov.amount : i.amount);
+  }, 0);
+
+  const trxTotal = transactions.reduce((acc, t) => acc + t.amount, 0);
+
+  const totalRevenuesAll = revTotal + transfersReceivedTotal;
+  const totalExpensesAll = recTotal + instTotal + trxTotal + transfersSentTotal;
+
+  return totalRevenuesAll - totalExpensesAll;
+}
+
+async function calculateWalletCarryoverSurplus(
+  walletId: string,
+  targetMonth: number,
+  year: number,
+  depth = 0
+): Promise<number> {
+  if (depth > 24) return 0;
+
+  const wallet = await db.wallet.findUnique({
+    where: { id: walletId },
+    select: { carryoverMode: true, carryoverTargetWalletId: true },
+  });
+
+  const carryoverMode = wallet?.carryoverMode || "NONE";
+  const prevMonth = targetMonth === 1 ? 12 : targetMonth - 1;
+  const prevYear = targetMonth === 1 ? year - 1 : year;
+
+  const prevNetFlow = await calculateWalletMonthlyNet(walletId, prevMonth, prevYear);
+
+  let prevStartingCarryover = 0;
+  if (carryoverMode === "NEXT_MONTH") {
+    prevStartingCarryover = await calculateWalletCarryoverSurplus(walletId, prevMonth, prevYear, depth + 1);
+  }
+
+  const prevEndingBalance = prevStartingCarryover + prevNetFlow;
+
+  let surplus = 0;
+  if (carryoverMode === "NEXT_MONTH" && prevEndingBalance > 0) {
+    surplus = prevEndingBalance;
+  }
+
+  const sourceWallets = await db.wallet.findMany({
+    where: { carryoverMode: "TARGET_WALLET", carryoverTargetWalletId: walletId },
+  });
+
+  for (const sW of sourceWallets) {
+    const sNetFlow = await calculateWalletMonthlyNet(sW.id, prevMonth, prevYear);
+    const sStartingCarryover = await calculateWalletCarryoverSurplus(sW.id, prevMonth, prevYear, depth + 1);
+    const sEndingBalance = sStartingCarryover + sNetFlow;
+    if (sEndingBalance > 0) {
+      surplus += sEndingBalance;
+    }
+  }
+
+  return surplus;
+}
+
+export async function getPreviousMonthCarryover(walletId: string, month: number, year: number): Promise<{
   deficit: number;
   surplus: number;
   prevMonthName: string;
   isPersonal: boolean;
 }> {
-  const wallet = await db.wallet.findUnique({ where: { id: walletId }, select: { isPersonal: true } });
+  const wallet = await db.wallet.findUnique({
+    where: { id: walletId },
+    select: { isPersonal: true, carryoverMode: true, carryoverTargetWalletId: true },
+  });
+
   const isPersonal = wallet?.isPersonal ?? false;
 
   const targetMonth = month === 0 ? new Date().getMonth() + 1 : month;
@@ -798,33 +1014,9 @@ async function getPreviousMonthCarryover(walletId: string, month: number, year: 
   const prevYear = targetMonth === 1 ? year - 1 : year;
   const prevMonthName = MONTH_NAMES[prevMonth - 1];
 
-  const [prevRevenues, prevRecurring, prevInstallments, prevTransactions, prevOverrides] = await Promise.all([
-    getRevenues(walletId, prevMonth, prevYear),
-    getRecurringExpenses(walletId),
-    getInstallments(walletId, prevMonth, prevYear),
-    getTransactions(walletId, prevMonth, prevYear),
-    db.expenseOverride.findMany({ where: { walletId, year: prevYear } }),
-  ]);
-
-  const prevRevWithOverrides = prevRevenues.reduce((acc, r) => {
-    const ov = prevOverrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && o.month === prevMonth);
-    return acc + (ov ? ov.amount : r.amount);
-  }, 0);
-
-  const prevRecWithOverrides = prevRecurring.reduce((acc, r) => {
-    const ov = prevOverrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === prevMonth);
-    return acc + (ov ? ov.amount : r.amount);
-  }, 0);
-
-  const prevInstTotal = prevInstallments.reduce((acc, i) => acc + i.amount, 0);
-  const prevTrxTotal = prevTransactions.reduce((acc, t) => acc + t.amount, 0);
-
-  const prevTotalExpenses = prevRecWithOverrides + prevInstTotal + prevTrxTotal;
-  const prevNet = prevRevWithOverrides - prevTotalExpenses;
-
+  const prevNet = await calculateWalletMonthlyNet(walletId, prevMonth, prevYear);
   const deficit = prevNet < 0 ? Math.abs(prevNet) : 0;
-  // Sur les portefeuilles additionnels/partagés (isPersonal === false), on reporte le surplus du mois précédent
-  const surplus = (!isPersonal && prevNet > 0) ? prevNet : 0;
+  const surplus = await calculateWalletCarryoverSurplus(walletId, targetMonth, year);
 
   return {
     deficit,
@@ -834,6 +1026,24 @@ async function getPreviousMonthCarryover(walletId: string, month: number, year: 
   };
 }
 
+export async function updateWalletCarryoverSettings(
+  walletId: string,
+  carryoverMode: "NONE" | "NEXT_MONTH" | "TARGET_WALLET",
+  carryoverTargetWalletId?: string
+) {
+  await requireWalletAccess(walletId, "OWNER");
+
+  await db.wallet.update({
+    where: { id: walletId },
+    data: {
+      carryoverMode,
+      carryoverTargetWalletId: carryoverMode === "TARGET_WALLET" ? (carryoverTargetWalletId || null) : null,
+    },
+  });
+
+  revalidatePath("/");
+}
+
 export async function getDashboardData(walletId: string, month: number, year: number) {
   const { userRole } = await requireWalletAccess(walletId, "READ_ONLY");
 
@@ -841,9 +1051,9 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   const processedWhere: any = { walletId, year };
   if (month > 0) processedWhere.month = month;
 
-  const [revenues, recurring, installments, transactions, envelopes, processed, overrides, prevMonthCarryoverInfo, transfersSent, transfersReceived] = await Promise.all([
+  const [revenues, recurring, installments, transactions, envelopes, processed, overrides, prevMonthCarryoverInfo, rawTransfersSent, rawTransfersReceived, wishlistItems] = await Promise.all([
     getRevenues(walletId, month, year),
-    getRecurringExpenses(walletId),
+    getRecurringExpenses(walletId, month, year),
     getInstallments(walletId, month, year),
     getTransactions(walletId, month, year),
     getBudgets(walletId, month, year),
@@ -851,20 +1061,35 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     db.expenseOverride.findMany({ where: { walletId, year } }),
     getPreviousMonthCarryover(walletId, month, year),
     db.walletTransfer.findMany({
-      where: { sourceWalletId: walletId, month: targetM, year },
+      where: { sourceWalletId: walletId },
       include: {
         targetWallet: { select: { id: true, name: true } },
         createdBy: { select: { name: true, email: true } },
       },
     }),
     db.walletTransfer.findMany({
-      where: { targetWalletId: walletId, month: targetM, year },
+      where: { targetWalletId: walletId },
       include: {
         sourceWallet: { select: { id: true, name: true } },
         createdBy: { select: { name: true, email: true } },
       },
     }),
+    getWishlistItems(walletId),
   ]);
+
+  const transfersSent = rawTransfersSent.filter((t) => {
+    if (!t.isRecurring) {
+      return t.month === targetM && t.year === year;
+    }
+    return t.year < year || (t.year === year && (targetM === 0 || t.month <= targetM));
+  });
+
+  const transfersReceived = rawTransfersReceived.filter((t) => {
+    if (!t.isRecurring) {
+      return t.month === targetM && t.year === year;
+    }
+    return t.year < year || (t.year === year && (targetM === 0 || t.month <= targetM));
+  });
 
   const manualDeficitOv = overrides.find(
     (o) => o.paymentId === "PREV_DEFICIT" && o.type === "DEFICIT" && o.month === targetM
@@ -913,10 +1138,73 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     };
   });
 
+  // Helper pour distinguer un Crédit d'un Paiement Fractionné
+  const isCreditCategory = (cat: string) => {
+    const c = (cat || "").toLowerCase();
+    return (
+      c.includes("crédit") ||
+      c.includes("credit") ||
+      c.includes("prêt") ||
+      c.includes("pret") ||
+      c.includes("emprunt") ||
+      c.includes("immo") ||
+      c.includes("auto") ||
+      c.includes("banque")
+    );
+  };
+
+  // Appliquer les ajustements ponctuels (overrides) sur les crédits / paiements fractionnés
+  const installmentsWithOverrides = installments.map((i) => {
+    const ov = overrides.find(
+      (o) => o.paymentId === i.id && o.type === "INSTALLMENT" && (targetM === 0 || o.month === targetM)
+    );
+    const amount = ov ? ov.amount : i.amount;
+    const isCredit = isCreditCategory(i.category);
+    
+    const totalMonths = Math.max(1, (i.endYear - i.startYear) * 12 + (i.endMonth - i.startMonth) + 1);
+    
+    // Mois visé pour le calcul du restant (si "Tous les mois" (0) est sélectionné, on prend le mois actuel)
+    const currentM = targetM === 0 ? new Date().getMonth() + 1 : targetM;
+    const currentY = year;
+
+    let remainingMonths = 0;
+    if (currentY < i.startYear || (currentY === i.startYear && currentM < i.startMonth)) {
+      // Pas encore commencé -> 100% du crédit reste à payer
+      remainingMonths = totalMonths;
+    } else if (currentY > i.endYear || (currentY === i.endYear && currentM > i.endMonth)) {
+      // Déjà entièrement remboursé -> 0 € restant
+      remainingMonths = 0;
+    } else {
+      // En cours de remboursement -> Mois restants du mois courant jusqu'au mois de fin inclus
+      remainingMonths = (i.endYear - currentY) * 12 + (i.endMonth - currentM) + 1;
+    }
+
+    remainingMonths = Math.min(totalMonths, Math.max(0, remainingMonths));
+    const elapsedMonths = totalMonths - remainingMonths;
+    const paidAmount = elapsedMonths * amount;
+    
+    // Si totalAmount est spécifié et supérieur au montant payé, on déduit le payé du totalAmount, sinon remainingMonths * amount
+    const remainingAmount = (i.totalAmount && i.totalAmount > paidAmount)
+      ? Math.max(0, i.totalAmount - paidAmount)
+      : remainingMonths * amount;
+
+    return {
+      ...i,
+      amount,
+      originalAmount: i.amount,
+      hasOverride: !!ov,
+      processed: processed.some((p) => p.paymentId === i.id && p.type === "INSTALLMENT"),
+      isCredit,
+      totalMonths,
+      remainingMonths,
+      remainingAmount,
+    };
+  });
+
   // Calcul de la base pour les virements en pourcentage du portefeuille source
   const totalEnvelopeLimits = envelopes.reduce((acc, e) => acc + (e.limitAmount > 0 ? e.limitAmount : 0), 0);
   const rawRevenuesTotal = revenuesWithOverrides.reduce((acc, r) => acc + r.amount, 0);
-  const rawFixedTotal = recurringWithOverrides.reduce((acc, r) => acc + r.amount, 0) + installments.reduce((acc, i) => acc + i.amount, 0);
+  const rawFixedTotal = recurringWithOverrides.reduce((acc, r) => acc + r.amount, 0) + installmentsWithOverrides.reduce((acc, i) => acc + i.amount, 0);
   const transferBase = Math.max(0, rawRevenuesTotal - rawFixedTotal - totalEnvelopeLimits);
 
   const transfersSentWithProcessed = transfersSent.map((t) => {
@@ -938,25 +1226,30 @@ export async function getDashboardData(walletId: string, month: number, year: nu
       if (t.isPercentage && t.percentage && t.percentage > 0) {
         const [sRevenues, sRecurring, sInstallments, sEnvelopes, sOverrides] = await Promise.all([
           getRevenues(t.sourceWalletId, targetM, year),
-          getRecurringExpenses(t.sourceWalletId),
+          getRecurringExpenses(t.sourceWalletId, targetM, year),
           getInstallments(t.sourceWalletId, targetM, year),
           getBudgets(t.sourceWalletId, targetM, year),
           db.expenseOverride.findMany({ where: { walletId: t.sourceWalletId, year } }),
         ]);
 
         const sRevTotal = sRevenues.reduce((acc, r) => {
-          const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && o.month === targetM);
+          const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && (targetM === 0 || o.month === targetM));
           return acc + (ov ? ov.amount : r.amount);
         }, 0);
 
         const sRecTotal = sRecurring.reduce((acc, r) => {
-          const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === targetM);
+          const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && (targetM === 0 || o.month === targetM));
           return acc + (ov ? ov.amount : r.amount);
         }, 0);
 
-        const sInstTotal = sInstallments.reduce((acc, i) => acc + i.amount, 0);
+        const sInstTotal = sInstallments.reduce((acc, i) => {
+          const ov = sOverrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && (targetM === 0 || o.month === targetM));
+          return acc + (ov ? ov.amount : i.amount);
+        }, 0);
+
         const sEnvTotal = sEnvelopes.reduce((acc, e) => acc + (e.limitAmount > 0 ? e.limitAmount : 0), 0);
 
+        // La base pour le virement en % est calculée strictement sur les revenus bruts directs du portefeuille source (sans inclure d'autres virements)
         const sBase = Math.max(0, sRevTotal - (sRecTotal + sInstTotal) - sEnvTotal);
         effectiveAmount = Math.round((t.percentage / 100) * sBase * 100) / 100;
       }
@@ -1000,18 +1293,20 @@ export async function getDashboardData(walletId: string, month: number, year: nu
 
   const totalTransfersSent = transfersSentWithProcessed.reduce((acc, t) => acc + t.amount, 0);
   const totalRecurring = recurringWithOverrides.reduce((acc, r) => acc + r.amount, 0);
-  const totalInstallments = installments.reduce((acc, i) => acc + i.amount, 0);
+  const totalInstallments = installmentsWithOverrides.reduce((acc, i) => acc + i.amount, 0);
   const totalTransactions = transactions.reduce((acc, t) => acc + t.amount, 0);
 
-  const fixedExpenses = totalRecurring + totalInstallments + totalTransfersSent;
-  const restToLive = totalRevenues - fixedExpenses;
-  const totalExpenses = fixedExpenses + totalTransactions;
-  const netSavings = totalRevenues - totalExpenses - previousMonthDeficit + previousMonthSurplus;
+  const creditsList = installmentsWithOverrides.filter((i) => i.isCredit);
+  const fractionalList = installmentsWithOverrides.filter((i) => !i.isCredit);
 
-  const installmentsWithProcessed = installments.map((i) => ({
-    ...i,
-    processed: processed.some((p) => p.paymentId === i.id && p.type === "INSTALLMENT"),
-  }));
+  const totalCredits = creditsList.reduce((acc, i) => acc + i.amount, 0);
+  const totalFractional = fractionalList.reduce((acc, i) => acc + i.amount, 0);
+  const totalCreditsRemaining = creditsList.reduce((acc, i) => acc + i.remainingAmount, 0);
+  const totalFractionalRemaining = fractionalList.reduce((acc, i) => acc + i.remainingAmount, 0);
+
+  const fixedExpenses = totalRecurring + totalInstallments;
+  const restToLive = totalRevenues - fixedExpenses - totalTransfersSent;
+  const totalExpenses = fixedExpenses + totalTransfersSent + totalTransactions;
 
   // Calcul du pointage bancaire
   const pointedRevenues = [
@@ -1025,7 +1320,7 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     .filter((r) => r.processed)
     .reduce((acc, r) => acc + r.amount, 0);
 
-  const pointedInstallments = installmentsWithProcessed
+  const pointedInstallments = installmentsWithOverrides
     .filter((i) => i.processed)
     .reduce((acc, i) => acc + i.amount, 0);
 
@@ -1053,18 +1348,23 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   allWalletEnvelopes.forEach((e) => e.category && categorySet.add(e.category.trim()));
   allWalletInstallments.forEach((i) => i.category && categorySet.add(i.category.trim()));
 
-  const categories = Array.from(categorySet).sort((a, b) => a.localeCompare(b));
-
-  const EXCLUDED_ENVELOPE_CATEGORIES = [
+  const EXCLUDED_SYSTEM_CATEGORIES = [
     "crédit",
     "credit",
+    "crédits",
+    "credits",
     "paiement échelonné",
     "paiement echelonne",
+    "paiements échelonnés",
+    "échéance",
+    "echeance",
   ];
 
-  const envelopeCategoriesList = categories.filter(
-    (cat) => !EXCLUDED_ENVELOPE_CATEGORIES.includes(cat.trim().toLowerCase())
-  );
+  const categories = Array.from(categorySet)
+    .filter((cat) => !EXCLUDED_SYSTEM_CATEGORIES.includes(cat.trim().toLowerCase()))
+    .sort((a, b) => a.localeCompare(b));
+
+  const envelopeCategoriesList = categories;
 
   const PRESET_COLORS_LIST = ["teal", "blue", "violet", "pink", "orange", "green", "red", "gray"];
 
@@ -1106,6 +1406,15 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     };
   });
 
+  const totalEnvelopesBudgetCost = envelopeStats.reduce((acc, env) => {
+    if (env.hasLimit) {
+      return acc + (env.spent > env.limitAmount ? env.spent : env.limitAmount);
+    }
+    return acc + env.spent;
+  }, 0);
+
+  const netSavings = totalRevenues - fixedExpenses - totalTransfersSent - totalEnvelopesBudgetCost - previousMonthDeficit + previousMonthSurplus;
+
   return {
     userRole,
     month,
@@ -1117,12 +1426,17 @@ export async function getDashboardData(walletId: string, month: number, year: nu
       totalRevenues,
       totalRecurring,
       totalInstallments,
+      totalCredits,
+      totalFractional,
+      totalCreditsRemaining,
+      totalFractionalRemaining,
       totalTransfersSent,
       fixedExpenses,
       restToLive,
       totalTransactions,
       totalExpenses,
-      netSavings: totalRevenues - totalExpenses - previousMonthDeficit,
+      totalEnvelopesBudgetCost,
+      netSavings,
       pointedRevenues,
       pointedFixedExpenses,
       remainingFixedExpenses,
@@ -1140,8 +1454,198 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     revenues: standardRevenues,
     reimbursements,
     recurring: recurringWithOverrides,
-    installments: installmentsWithProcessed,
+    installments: installmentsWithOverrides,
     transfersSent: transfersSentWithProcessed,
     transfersReceived: transfersReceivedWithProcessed,
+    wishlistItems,
   };
+}
+
+/* ==========================================================================
+   WISHLIST / LISTE D'ACHAT
+   ========================================================================== */
+
+export async function getWishlistItems(walletId: string) {
+  await requireWalletAccess(walletId, "READ_ONLY");
+
+  const items = await db.wishlistItem.findMany({
+    where: { walletId },
+    include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+    },
+    orderBy: [
+      { status: "asc" },
+      { createdAt: "desc" },
+    ],
+  });
+
+  return items.map((i) => ({
+    ...i,
+    creatorName: i.createdBy.name || i.createdBy.email.split("@")[0],
+  }));
+}
+
+export async function createWishlistItem(
+  walletId: string,
+  data: {
+    title: string;
+    amount: number;
+    url?: string;
+    category?: string;
+    notes?: string;
+    priority?: string;
+  }
+) {
+  const { userId } = await requireWalletAccess(walletId, "FULL_ACCESS");
+
+  const item = await db.wishlistItem.create({
+    data: {
+      walletId,
+      createdById: userId,
+      title: data.title.trim(),
+      amount: data.amount,
+      url: data.url ? data.url.trim() : null,
+      category: data.category || "Général",
+      notes: data.notes ? data.notes.trim() : null,
+      priority: data.priority || "NORMAL",
+      status: "PENDING",
+    },
+  });
+
+  revalidatePath("/");
+  return item;
+}
+
+export async function updateWishlistItem(
+  walletId: string,
+  itemId: string,
+  data: Partial<{
+    title: string;
+    amount: number;
+    url?: string;
+    category?: string;
+    notes?: string;
+    priority?: string;
+    status?: string;
+  }>
+) {
+  await requireWalletAccess(walletId, "FULL_ACCESS");
+
+  const updateData: any = {};
+  if (data.title !== undefined) updateData.title = data.title.trim();
+  if (data.amount !== undefined) updateData.amount = data.amount;
+  if (data.url !== undefined) updateData.url = data.url ? data.url.trim() : null;
+  if (data.category !== undefined) updateData.category = data.category;
+  if (data.notes !== undefined) updateData.notes = data.notes ? data.notes.trim() : null;
+  if (data.priority !== undefined) updateData.priority = data.priority;
+  if (data.status !== undefined) {
+    updateData.status = data.status;
+    if (data.status === "PURCHASED") {
+      updateData.purchasedAt = new Date();
+    }
+  }
+
+  const updated = await db.wishlistItem.update({
+    where: { id: itemId },
+    data: updateData,
+  });
+
+  revalidatePath("/");
+  return updated;
+}
+
+export async function deleteWishlistItem(walletId: string, itemId: string) {
+  await requireWalletAccess(walletId, "FULL_ACCESS");
+
+  await db.wishlistItem.delete({
+    where: { id: itemId },
+  });
+
+  revalidatePath("/");
+}
+
+export async function convertWishlistItemToTransaction(
+  sourceWalletId: string,
+  itemId: string,
+  data: {
+    targetWalletId: string;
+    day: number;
+    month: number;
+    year: number;
+    amount: number;
+    category: string;
+  }
+) {
+  const { userId } = await requireWalletAccess(data.targetWalletId, "FULL_ACCESS");
+
+  const wishlistItem = await db.wishlistItem.findUnique({ where: { id: itemId } });
+  if (!wishlistItem) throw new Error("Élément de la liste d'achat non trouvé.");
+
+  await db.$transaction([
+    db.transaction.create({
+      data: {
+        walletId: data.targetWalletId,
+        title: wishlistItem.title,
+        amount: data.amount,
+        category: data.category || wishlistItem.category || "Général",
+        day: data.day,
+        month: data.month,
+        year: data.year,
+      },
+    }),
+    db.wishlistItem.delete({
+      where: { id: itemId },
+    }),
+  ]);
+
+  revalidatePath("/");
+}
+
+export async function convertWishlistItemToInstallment(
+  sourceWalletId: string,
+  itemId: string,
+  data: {
+    targetWalletId: string;
+    amount: number;
+    totalMonths: number;
+    startMonth: number;
+    startYear: number;
+    dayOfMonth: number;
+    category: string;
+  }
+) {
+  await requireWalletAccess(data.targetWalletId, "FULL_ACCESS");
+
+  const wishlistItem = await db.wishlistItem.findUnique({ where: { id: itemId } });
+  if (!wishlistItem) throw new Error("Élément de la liste d'achat non trouvé.");
+
+  let endMonth = data.startMonth + data.totalMonths - 1;
+  let endYear = data.startYear;
+  while (endMonth > 12) {
+    endMonth -= 12;
+    endYear += 1;
+  }
+
+  await db.$transaction([
+    db.installmentPayment.create({
+      data: {
+        walletId: data.targetWalletId,
+        title: wishlistItem.title,
+        amount: data.amount,
+        totalAmount: data.amount * data.totalMonths,
+        category: data.category || wishlistItem.category || "Général",
+        color: "violet",
+        dayOfMonth: data.dayOfMonth,
+        startMonth: data.startMonth,
+        startYear: data.startYear,
+        endMonth,
+        endYear,
+      },
+    }),
+    db.wishlistItem.delete({
+      where: { id: itemId },
+    }),
+  ]);
+
+  revalidatePath("/");
 }

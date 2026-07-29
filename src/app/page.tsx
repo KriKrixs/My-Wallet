@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { getUserWallets } from "@/lib/actions/finance";
 import DashboardClient from "./dashboard-client";
 
 export default async function HomePage() {
@@ -13,15 +14,10 @@ export default async function HomePage() {
 
   const userId = (session.user as any).id;
 
-  // Récupérer les portefeuilles de l'utilisateur
-  let userWallets = await db.walletUser.findMany({
-    where: { userId },
-    include: { wallet: true },
-  });
-
-  // Si aucun portefeuille, en créer un personnel automatiquement
-  if (userWallets.length === 0) {
-    const newWallet = await db.wallet.create({
+  // S'assurer que l'utilisateur a au moins un portefeuille personnel
+  const count = await db.walletUser.count({ where: { userId } });
+  if (count === 0) {
+    await db.wallet.create({
       data: {
         name: "Portefeuille Personnel",
         isPersonal: true,
@@ -34,27 +30,10 @@ export default async function HomePage() {
         },
       },
     });
-
-    userWallets = [
-      {
-        walletId: newWallet.id,
-        userId,
-        role: "OWNER",
-        wallet: newWallet,
-      },
-    ];
   }
 
-  const wallets = userWallets.map((uw) => ({
-    id: uw.wallet.id,
-    name: uw.wallet.name,
-    currency: uw.wallet.currency,
-    isPersonal: uw.wallet.isPersonal,
-    role: uw.role as any,
-    isOwner: uw.wallet.ownerId === userId,
-  }));
-
-  const initialWalletId = (session.user as any).activeWalletId || wallets[0].id;
+  const wallets = await getUserWallets();
+  const initialWalletId = (session.user as any).activeWalletId || (wallets[0] ? wallets[0].id : "");
 
   return <DashboardClient initialWallets={wallets} initialWalletId={initialWalletId} user={session.user} />;
 }

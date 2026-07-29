@@ -79,47 +79,75 @@ async function authenticateAD(usernameInput: string, passwordInput: string): Pro
 }
 
 
+import bcrypt from "bcryptjs";
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       id: "active-directory",
-      name: "Active Directory (Windows Server)",
+      name: "Connexion (LDAP ou Compte Local)",
       credentials: {
-        username: { label: "Identifiant / E-mail AD", type: "text", placeholder: "utilisateur@domaine.local" },
-        password: { label: "Mot de passe AD", type: "password" },
+        username: { label: "Identifiant / E-mail", type: "text", placeholder: "utilisateur@domaine.local ou email" },
+        password: { label: "Mot de passe", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
 
-        let adUser: { email: string; name: string };
+        const usernameInput = credentials.username.trim();
+        const passwordInput = credentials.password;
+        const ldapUrl = process.env.LDAP_URL;
+        const isLdapEnabled = process.env.NEXT_PUBLIC_LDAP_ENABLED === "true" || process.env.LDAP_ENABLED === "true" || Boolean(ldapUrl && ldapUrl.trim() !== "");
 
-        try {
-          adUser = await authenticateAD(credentials.username, credentials.password);
-        } catch (err: any) {
-          // Remonter le message d'erreur précis au formulaire de connexion
-          throw new Error(err?.message || "Erreur d'authentification Active Directory.");
+        // 1. Essayer d'abord l'authentification Active Directory / LDAP si configuré
+        if (isLdapEnabled && ldapUrl) {
+          try {
+            const adUser = await authenticateAD(usernameInput, passwordInput);
+            if (adUser) {
+              let user = await db.user.findUnique({
+                where: { email: adUser.email },
+              });
+
+              if (!user) {
+                user = await db.user.create({
+                  data: {
+                    email: adUser.email,
+                    name: adUser.name,
+                    role: "USER",
+                  },
+                });
+              }
+
+              return {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+              };
+            }
+          } catch (err: any) {
+            console.log("[AUTH] Tentative LDAP échouée, bascule vers vérification du compte local...", err?.message);
+          }
         }
 
-        let user = await db.user.findUnique({
-          where: { email: adUser.email },
+        // 2. Si LDAP est désactivé ou a échoué, vérifier le compte local dans PostgreSQL
+        const localUser = await db.user.findUnique({
+          where: { email: usernameInput.toLowerCase() },
         });
 
-        if (!user) {
-          user = await db.user.create({
-            data: {
-              email: adUser.email,
-              name: adUser.name,
-              role: "USER",
-            },
-          });
+        if (localUser && localUser.password) {
+          const isValid = await bcrypt.compare(passwordInput, localUser.password);
+          if (isValid) {
+            return {
+              id: localUser.id,
+              name: localUser.name,
+              email: localUser.email,
+              role: localUser.role,
+            };
+          }
         }
 
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        };
+        // 3. Si aucun compte ne correspond
+        throw new Error("Identifiant ou mot de passe incorrect.");
       },
     }),
     // Mode développement local : connexion rapide sans serveur LDAP
