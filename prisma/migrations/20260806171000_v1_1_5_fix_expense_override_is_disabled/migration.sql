@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "ExpenseOverride" ADD COLUMN IF NOT EXISTS "isDisabled" BOOLEAN NOT NULL DEFAULT false,
+ALTER COLUMN "amount" DROP NOT NULL;

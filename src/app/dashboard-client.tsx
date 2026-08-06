@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import {
   Container,
@@ -70,6 +70,7 @@ import {
   IconExternalLink,
   IconFlame,
   IconCircleCheck,
+  IconWifiOff,
 } from "@tabler/icons-react";
 import {
   getDashboardData,
@@ -93,12 +94,14 @@ import {
   removeUserFromWallet,
   setExpenseOverride,
   removeExpenseOverride,
+  toggleDisableItem,
   updateRevenueGlobal,
   updateRecurringExpenseGlobal,
   updateInstallmentGlobal,
   setDeficitOverride,
   removeDeficitOverride,
   createWalletTransfer,
+  updateWalletTransfer,
   deleteWalletTransfer,
   updateWalletCarryoverSettings,
   getUserWallets,
@@ -174,6 +177,7 @@ const parseAmount = (val: number | string | null | undefined): number => {
 };
 
 const PRESET_COLORS = [
+  { label: "Blanc", value: "white" },
   { label: "Teal", value: "teal" },
   { label: "Bleu", value: "blue" },
   { label: "Violet", value: "violet" },
@@ -181,7 +185,6 @@ const PRESET_COLORS = [
   { label: "Orange", value: "orange" },
   { label: "Vert", value: "green" },
   { label: "Rouge", value: "red" },
-  { label: "Gris", value: "gray" },
 ];
 
 function CategorySelect({
@@ -263,16 +266,136 @@ function CategorySelect({
 
 export default function DashboardClient({ initialWallets, initialWalletId, user }: DashboardClientProps) {
   const router = useRouter();
-  const currentDate = new Date();
-  const [month, setMonth] = useState(currentDate.getMonth() + 1);
-  const [year, setYear] = useState(currentDate.getFullYear());
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  const VALID_TABS = ["overview", "pointage", "fixed", "transactions", "transfers", "stats", "wishlist"];
+
+  const initialTab = useMemo(() => {
+    const t = searchParams.get("tab");
+    return t && VALID_TABS.includes(t) ? t : "overview";
+  }, []);
+
+  const initialUrlWallet = useMemo(() => {
+    const w = searchParams.get("wallet");
+    return w && initialWallets.some((item) => item.id === w) ? w : initialWalletId;
+  }, [initialWallets, initialWalletId]);
+
+  const initialUrlMonth = useMemo(() => {
+    const m = searchParams.get("month");
+    if (m !== null) {
+      const parsed = Number(m);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 12) return parsed;
+    }
+    return new Date().getMonth() + 1;
+  }, []);
+
+  const initialUrlYear = useMemo(() => {
+    const y = searchParams.get("year");
+    if (y !== null) {
+      const parsed = Number(y);
+      if (!isNaN(parsed) && parsed > 2000) return parsed;
+    }
+    return new Date().getFullYear();
+  }, []);
+
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+  const [month, setMonth] = useState<number>(initialUrlMonth);
+  const [year, setYear] = useState<number>(initialUrlYear);
 
   const [wallets, setWallets] = useState<WalletItem[]>(initialWallets);
-  const [activeWalletId, setActiveWalletId] = useState<string>(initialWalletId);
+  const [activeWalletId, setActiveWalletId] = useState<string>(initialUrlWallet);
+
+  const updateUrlParams = (updates: { tab?: string; wallet?: string; month?: number; year?: number }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (updates.tab !== undefined) params.set("tab", updates.tab);
+    if (updates.wallet !== undefined) params.set("wallet", updates.wallet);
+    if (updates.month !== undefined) params.set("month", updates.month.toString());
+    if (updates.year !== undefined) params.set("year", updates.year.toString());
+
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
+    updateUrlParams({ tab: newTab });
+  };
+
+  const handleWalletSelect = (newWalletId: string) => {
+    setActiveWalletId(newWalletId);
+    updateUrlParams({ wallet: newWalletId });
+  };
+
+  const handleMonthChange = (newMonth: number) => {
+    setMonth(newMonth);
+    updateUrlParams({ month: newMonth });
+  };
+
+  const handleYearChange = (newYear: number) => {
+    setYear(newYear);
+    updateUrlParams({ year: newYear });
+  };
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && VALID_TABS.includes(t) && t !== activeTab) {
+      setActiveTab(t);
+    }
+    const w = searchParams.get("wallet");
+    if (w && wallets.some((item) => item.id === w) && w !== activeWalletId) {
+      setActiveWalletId(w);
+    }
+    const m = searchParams.get("month");
+    if (m !== null) {
+      const parsedM = Number(m);
+      if (!isNaN(parsedM) && parsedM >= 0 && parsedM <= 12 && parsedM !== month) {
+        setMonth(parsedM);
+      }
+    }
+    const y = searchParams.get("year");
+    if (y !== null) {
+      const parsedY = Number(y);
+      if (!isNaN(parsedY) && parsedY > 2000 && parsedY !== year) {
+        setYear(parsedY);
+      }
+    }
+  }, [searchParams, wallets]);
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsOffline(!navigator.onLine);
+
+      const handleOffline = () => setIsOffline(true);
+      const handleOnline = () => {
+        setIsOffline(false);
+        loadData();
+      };
+
+      window.addEventListener("offline", handleOffline);
+      window.addEventListener("online", handleOnline);
+
+      return () => {
+        window.removeEventListener("offline", handleOffline);
+        window.removeEventListener("online", handleOnline);
+      };
+    }
+  }, []);
+
+  const [actionModalItem, setActionModalItem] = useState<{
+    item: any;
+    type: "REVENUE" | "REIMBURSEMENT" | "RECURRING" | "INSTALLMENT" | "TRANSACTION" | "TRANSFER" | "WISHLIST";
+  } | null>(null);
+
+  const handleRowClick = (item: any, type: any) => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setActionModalItem({ item, type });
+    }
+  };
 
   const [recSortField, setRecSortField] = useState<"title" | "category" | "dayOfMonth" | "amount">("dayOfMonth");
   const [recSortOrder, setRecSortOrder] = useState<"asc" | "desc">("asc");
@@ -305,9 +428,31 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   }, [data?.recurring, recSortField, recSortOrder]);
 
   const getCategoryColor = (category?: string) => {
-    if (!category) return "gray";
+    if (!category) return "white";
     const env = data?.envelopes?.find((e: any) => e.category.toLowerCase() === category.toLowerCase());
-    return env?.color || "indigo";
+    const col = env?.color || "white";
+    return col === "gray" ? "white" : col;
+  };
+
+  const getCategoryTextColor = (category?: string) => {
+    const col = getCategoryColor(category);
+    if (col === "white" || col === "gray") return "white";
+    return `${col}.4`;
+  };
+
+  const renderCategoryBadge = (category?: string) => {
+    const col = getCategoryColor(category);
+    const isWhite = col === "white";
+    return (
+      <Badge
+        color={col}
+        variant="filled"
+        size="sm"
+        style={isWhite ? { color: "#000", fontWeight: 700 } : undefined}
+      >
+        {category || "Général"}
+      </Badge>
+    );
   };
 
   // Modals
@@ -322,6 +467,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const [editOverrideModal, setEditOverrideModal] = useState(false);
   const [deficitModal, setDeficitModal] = useState(false);
   const [transferModal, setTransferModal] = useState(false);
+  const [editingTransferId, setEditingTransferId] = useState<string | null>(null);
   const [carryoverModal, setCarryoverModal] = useState(false);
   const [cMode, setCMode] = useState<"NONE" | "NEXT_MONTH" | "TARGET_WALLET">("NONE");
   const [cTargetWalletId, setCTargetWalletId] = useState<string>("");
@@ -346,6 +492,17 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const [showPurchasedWishlist, setShowPurchasedWishlist] = useState(false);
   const [selectedWishlistIds, setSelectedWishlistIds] = useState<string[]>([]);
   const [safetyMarginPercent, setSafetyMarginPercent] = useState<number | string>(0);
+  const [wishlistSortField, setWishlistSortField] = useState<"priority" | "title" | "amount" | "category">("priority");
+  const [wishlistSortOrder, setWishlistSortOrder] = useState<"asc" | "desc">("desc");
+
+  const handleWishlistSort = (field: "priority" | "title" | "amount" | "category") => {
+    if (wishlistSortField === field) {
+      setWishlistSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setWishlistSortField(field);
+      setWishlistSortOrder(field === "priority" || field === "amount" ? "desc" : "asc");
+    }
+  };
 
   // Form Errors State
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -374,6 +531,34 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     if (!data?.envelopes) return 0;
     return data.envelopes.reduce((acc: number, e: any) => acc + (e.hasLimit && e.limitAmount > 0 ? e.limitAmount : 0), 0);
   }, [data?.envelopes]);
+
+  const unprocessedRevenuesTotal = useMemo(() => {
+    if (!data?.revenues) return 0;
+    return data.revenues
+      .filter((r: any) => !r.processed && !(r.isDisabled || (r.hasOverride && r.amount === 0)))
+      .reduce((acc: number, r: any) => acc + r.amount, 0);
+  }, [data?.revenues]);
+
+  const unprocessedReimbursementsTotal = useMemo(() => {
+    if (!data?.reimbursements) return 0;
+    return data.reimbursements
+      .filter((r: any) => !r.processed && !(r.isDisabled || (r.hasOverride && r.amount === 0)))
+      .reduce((acc: number, r: any) => acc + r.amount, 0);
+  }, [data?.reimbursements]);
+
+  const unprocessedRecurringTotal = useMemo(() => {
+    if (!data?.recurring) return 0;
+    return data.recurring
+      .filter((r: any) => !r.processed && !(r.isDisabled || (r.hasOverride && r.amount === 0)))
+      .reduce((acc: number, r: any) => acc + r.amount, 0);
+  }, [data?.recurring]);
+
+  const unprocessedInstallmentsTotal = useMemo(() => {
+    if (!data?.installments) return 0;
+    return data.installments
+      .filter((i: any) => !i.processed && !(i.isDisabled || (i.hasOverride && i.amount === 0)))
+      .reduce((acc: number, i: any) => acc + i.amount, 0);
+  }, [data?.installments]);
 
   const rawRevenuesTotal = data?.summary?.totalRevenues || 0;
   const rawFixedTotal = data?.summary?.fixedExpenses || 0;
@@ -508,6 +693,40 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
       feasibleInstallments,
     };
   }, [data?.wishlistItems, data?.summary?.netSavings, selectedWishlistIds, safetyMarginPercent]);
+
+  const sortedWishlistItems = useMemo(() => {
+    if (!data?.wishlistItems) return [];
+    const items = [...data.wishlistItems];
+
+    const priorityWeights: Record<string, number> = {
+      URGENT: 5,
+      IMPORTANT: 4,
+      MAJOR: 3,
+      NORMAL: 2,
+      LOW: 1,
+    };
+
+    return items.sort((a, b) => {
+      let aVal: any = a[wishlistSortField];
+      let bVal: any = b[wishlistSortField];
+
+      if (wishlistSortField === "priority") {
+        aVal = priorityWeights[a.priority] || 2;
+        bVal = priorityWeights[b.priority] || 2;
+        return wishlistSortOrder === "desc" ? bVal - aVal : aVal - bVal;
+      }
+
+      if (wishlistSortField === "title" || wishlistSortField === "category") {
+        aVal = (aVal || "").toLowerCase();
+        bVal = (bVal || "").toLowerCase();
+        return wishlistSortOrder === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+
+      aVal = Number(aVal) || 0;
+      bVal = Number(bVal) || 0;
+      return wishlistSortOrder === "asc" ? aVal - bVal : bVal - aVal;
+    });
+  }, [data?.wishlistItems, wishlistSortField, wishlistSortOrder]);
   const previewTransferAmount = Math.round(((Number(transferPercentage) || 0) / 100) * previewTransferBase * 100) / 100;
   const [editTarget, setEditTarget] = useState<{
     id: string;
@@ -806,17 +1025,29 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     try {
       const targetM = month === 0 ? new Date().getMonth() + 1 : month;
       const isPercent = transferType === "PERCENTAGE";
-      await createWalletTransfer(activeWalletId, transferTargetWalletId, {
-        title: transferTitle,
-        amount: isPercent ? 0 : parseAmount(transferAmount),
-        isPercentage: isPercent,
-        percentage: isPercent ? parseAmount(transferPercentage) : undefined,
-        isRecurring: transferIsRecurring,
-        dayOfMonth: isPercent ? 1 : (Number(transferDay) || 1),
-        month: targetM,
-        year,
-      });
+      if (editingTransferId) {
+        await updateWalletTransfer(activeWalletId, editingTransferId, {
+          title: transferTitle,
+          targetWalletId: transferTargetWalletId,
+          isPercentage: isPercent,
+          percentage: isPercent ? parseAmount(transferPercentage) : undefined,
+          amount: isPercent ? previewTransferAmount : parseAmount(transferAmount),
+          dayOfMonth: isPercent ? 1 : (Number(transferDay) || 1),
+        });
+      } else {
+        await createWalletTransfer(activeWalletId, transferTargetWalletId, {
+          title: transferTitle,
+          amount: isPercent ? previewTransferAmount : parseAmount(transferAmount),
+          isPercentage: isPercent,
+          percentage: isPercent ? parseAmount(transferPercentage) : undefined,
+          isRecurring: transferIsRecurring,
+          dayOfMonth: isPercent ? 1 : (Number(transferDay) || 1),
+          month: targetM,
+          year,
+        });
+      }
       setTransferModal(false);
+      setEditingTransferId(null);
       setTransferTitle("");
       setTransferTargetWalletId("");
       await loadData();
@@ -824,6 +1055,31 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     } catch (e: any) {
       setErrorMsg(e.message);
     }
+  };
+
+  const handleOpenAddTransfer = () => {
+    setEditingTransferId(null);
+    const otherWallet = wallets.find((w) => w.id !== activeWalletId);
+    if (otherWallet) setTransferTargetWalletId(otherWallet.id);
+    setTransferTitle("");
+    setTransferType("FIXED");
+    setTransferAmount(100);
+    setTransferPercentage(50);
+    setTransferIsRecurring(true);
+    setTransferDay(5);
+    setTransferModal(true);
+  };
+
+  const handleOpenEditTransfer = (t: any) => {
+    setEditingTransferId(t.id);
+    setTransferTitle(t.title);
+    setTransferTargetWalletId(t.targetWalletId);
+    setTransferType(t.isPercentage ? "PERCENTAGE" : "FIXED");
+    setTransferAmount(t.amount);
+    setTransferPercentage(t.percentage || 50);
+    setTransferIsRecurring(t.isRecurring !== undefined ? t.isRecurring : true);
+    setTransferDay(t.dayOfMonth || 1);
+    setTransferModal(true);
   };
 
   const handleOpenCarryoverModal = () => {
@@ -850,22 +1106,12 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
 
   const handleToggleDisableItem = async (item: any, type: "REVENUE" | "RECURRING" | "INSTALLMENT") => {
     const targetM = month === 0 ? new Date().getMonth() + 1 : month;
-    if (item.hasOverride && item.amount === 0) {
-      await removeExpenseOverride(activeWalletId, {
-        paymentId: item.id,
-        type,
-        month: targetM,
-        year,
-      });
-    } else {
-      await setExpenseOverride(activeWalletId, {
-        paymentId: item.id,
-        type,
-        amount: 0,
-        month: targetM,
-        year,
-      });
-    }
+    await toggleDisableItem(activeWalletId, {
+      paymentId: item.id,
+      type,
+      month: targetM,
+      year,
+    });
     await loadData();
     router.refresh();
   };
@@ -1177,11 +1423,16 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     endYear?: number;
     currentAmount: number;
     originalAmount: number;
+    overrideAmount?: number;
+    isDisabled?: boolean;
     hasOverride: boolean;
   }) => {
     setEditTarget(target);
     setEditTitle(target.title);
-    setEditAmount(target.currentAmount);
+    const initialAmount = (target.overrideAmount && target.overrideAmount > 0)
+      ? target.overrideAmount
+      : (target.currentAmount > 0 ? target.currentAmount : target.originalAmount);
+    setEditAmount(initialAmount);
     setEditScope("MONTH");
 
     if (target.type === "REVENUE") {
@@ -1394,7 +1645,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                 <Menu.Dropdown>
                   <Menu.Label>Mes Portefeuilles</Menu.Label>
                   {wallets.map((w) => (
-                    <Menu.Item key={w.id} onClick={() => setActiveWalletId(w.id)}>
+                    <Menu.Item key={w.id} onClick={() => handleWalletSelect(w.id)}>
                       <Group justify="space-between">
                         <Text size="sm" fw={w.id === activeWalletId ? 700 : 400}>
                           {w.name}
@@ -1448,7 +1699,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   size="xs"
                   data={MONTH_OPTIONS}
                   value={month.toString()}
-                  onChange={(val) => val !== null && setMonth(parseInt(val))}
+                  onChange={(val) => val !== null && handleMonthChange(parseInt(val))}
                   maxDropdownHeight={450}
                   style={{ width: 140 }}
                 />
@@ -1456,7 +1707,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   size="xs"
                   data={["2024", "2025", "2026", "2027", "2028"]}
                   value={year.toString()}
-                  onChange={(val) => val && setYear(parseInt(val))}
+                  onChange={(val) => val && handleYearChange(parseInt(val))}
                   style={{ width: 85 }}
                 />
               </Group>
@@ -1474,6 +1725,18 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
 
       {/* Main Container */}
       <Container style={{ maxWidth: "1650px" }} mt="lg">
+        {isOffline && (
+          <Notification
+            icon={<IconWifiOff size={18} />}
+            color="red"
+            title="Connexion interrompue"
+            withCloseButton={false}
+            mb="md"
+          >
+            Impossible de se connecter à l'application. Une connexion Internet active est requise.
+          </Notification>
+        )}
+
         {errorMsg && (
           <Notification icon={<IconAlertCircle size={18} />} color="red" title="Information" onClose={() => setErrorMsg(null)} mb="md">
             {errorMsg}
@@ -1487,17 +1750,14 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               <Paper p="md" radius="md" style={{ backgroundColor: "#161d30", border: "1px solid rgba(255,255,255,0.06)" }}>
                 <Group justify="space-between" mb={4}>
                   <Text size="xs" c="dimmed" fw={700}>
-                    REVENUS TOTAUX
+                    REVENUS DU MOIS
                   </Text>
                   <ThemeIcon size="sm" color="teal" variant="light" radius="xl">
                     <IconTrendingUp size={14} />
                   </ThemeIcon>
                 </Group>
-                <Text size="xl" fw={800} c="teal.4">
-                  {data.summary.totalRevenues.toFixed(2)} €
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Pour {getMonthLabel(month)} {year}
+                <Text size="xl" fw={800} c="teal.3">
+                  +{data.summary.totalRevenues.toFixed(2)} €
                 </Text>
               </Paper>
             </Grid.Col>
@@ -1508,12 +1768,12 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   <Text size="xs" c="dimmed" fw={700}>
                     CHARGES FIXES
                   </Text>
-                  <ThemeIcon size="sm" color="indigo" variant="light" radius="xl">
-                    <IconCreditCard size={14} />
+                  <ThemeIcon size="sm" color="red" variant="light" radius="xl">
+                    <IconTrendingDown size={14} />
                   </ThemeIcon>
                 </Group>
-                <Text size="xl" fw={800} c="indigo.4">
-                  {data.summary.fixedExpenses.toFixed(2)} €
+                <Text size="xl" fw={800} c="red.4">
+                  -{data.summary.fixedExpenses.toFixed(2)} €
                 </Text>
                 <Text size="xs" c="dimmed">
                   Récurrents + Crédits
@@ -1564,7 +1824,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
         )}
 
         {/* Tabbed Navigation */}
-        <Tabs defaultValue="overview" variant="pills" color="teal">
+        <Tabs value={activeTab} onChange={(val) => val && handleTabChange(val)} variant="pills" color="teal">
           <Tabs.List mb="md" style={{ gap: "8px" }}>
             <Tabs.Tab value="overview" leftSection={<IconSparkles size={16} />}>
               Vue d'Ensemble
@@ -1645,16 +1905,17 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           </Paper>
                         ) : (
                           <Grid gap="md">
-                            {data.envelopes
+                                {data.envelopes
                               .filter((env: any) => env.hasLimit)
                               .map((env: any) => {
                                 const isOver = env.remaining < 0;
+                                const cardColor = getCategoryColor(env.category);
                                 return (
                                   <Grid.Col key={env.id} span={{ base: 12, sm: 6 }}>
                                     <Card padding="md" radius="md" style={{ backgroundColor: "#182036", border: isOver ? "1px solid #fa5252" : "1px solid rgba(255,255,255,0.06)" }}>
                                       <Group justify="space-between" mb="xs">
                                         <Group gap="xs">
-                                          <Badge color={env.color || "teal"} variant="filled" size="sm">
+                                          <Badge color={cardColor} style={cardColor === "white" ? { color: "#000", fontWeight: 700 } : undefined} variant="filled" size="sm">
                                             {env.category}
                                           </Badge>
                                         </Group>
@@ -1671,7 +1932,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                                                 onClick={() => {
                                                   setEnvCategory(env.category);
                                                   setEnvLimit(env.limitAmount || "");
-                                                  setEnvColor(env.color || "teal");
+                                                  setEnvColor(cardColor);
                                                   setEnvMonth(month === 0 ? new Date().getMonth() + 1 : month);
                                                   setEnvYear(year);
                                                   setEnvelopeModal(true);
@@ -1695,7 +1956,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
 
                                       <Progress
                                         value={Math.min(env.percentSpent, 100)}
-                                        color={isOver ? "red" : env.percentSpent > 80 ? "orange" : (env.color || "teal")}
+                                        color={isOver ? "red" : env.percentSpent > 80 ? "orange" : cardColor}
                                         size="md"
                                         radius="xl"
                                       />
@@ -1724,17 +1985,18 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                             {data.envelopes
                               .filter((env: any) => !env.hasLimit)
                               .map((env: any) => {
+                                const cardColor = getCategoryColor(env.category);
                                 return (
                                   <Grid.Col key={env.id} span={{ base: 12, sm: 6 }}>
                                     <Card padding="md" radius="md" style={{ backgroundColor: "#182036", border: "1px solid rgba(255,255,255,0.06)" }}>
                                       <Group justify="space-between" mb="xs">
                                         <Group gap="xs">
-                                          <Badge color={env.color || "teal"} variant="filled" size="sm">
+                                          <Badge color={cardColor} style={cardColor === "white" ? { color: "#000", fontWeight: 700 } : undefined} variant="filled" size="sm">
                                             {env.category}
                                           </Badge>
                                         </Group>
                                         <Group gap="xs">
-                                          <Badge color="gray" variant="light" size="sm">
+                                          <Badge color="white" style={{ color: "#000", fontWeight: 700 }} variant="filled" size="sm">
                                             Plafond non défini
                                           </Badge>
                                           {!isReadOnly && (
@@ -2055,11 +2317,17 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
 
               <Grid>
                 {/* Pointage Revenus */}
-                <Grid.Col span={{ base: 12, md: 4 }}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
                   <Paper p="md" radius="md" style={{ backgroundColor: "#182036" }}>
-                    <Text fw={700} c="teal.4" mb="sm">
+                    <Text fw={700} c="teal.4" mb={4}>
                       Revenus Encaissés
                     </Text>
+                    <Group justify="space-between" align="center" mb="sm" p="xs" style={{ backgroundColor: "#121829", borderRadius: 6, border: "1px solid rgba(255,255,255,0.05)" }}>
+                      <Text size="xs" c="dimmed">Restant à encaisser :</Text>
+                      <Badge color="teal" variant="light" size="sm">
+                        +{unprocessedRevenuesTotal.toFixed(2)} €
+                      </Badge>
+                    </Group>
                     {data?.revenues?.length === 0 ? (
                       <Text size="xs" c="dimmed">
                         Aucun revenu.
@@ -2089,12 +2357,59 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   </Paper>
                 </Grid.Col>
 
-                {/* Pointage Charges Récurrentes */}
-                <Grid.Col span={{ base: 12, md: 4 }}>
+                {/* Pointage Remboursements */}
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
                   <Paper p="md" radius="md" style={{ backgroundColor: "#182036" }}>
-                    <Text fw={700} c="indigo.4" mb="sm">
-                      Charges Récurrentes Prélevées
+                    <Text fw={700} c="cyan.4" mb={4}>
+                      Remboursements Encaissés
                     </Text>
+                    <Group justify="space-between" align="center" mb="sm" p="xs" style={{ backgroundColor: "#121829", borderRadius: 6, border: "1px solid rgba(255,255,255,0.05)" }}>
+                      <Text size="xs" c="dimmed">Restant à encaisser :</Text>
+                      <Badge color="cyan" variant="light" size="sm">
+                        +{unprocessedReimbursementsTotal.toFixed(2)} €
+                      </Badge>
+                    </Group>
+                    {data?.reimbursements?.length === 0 ? (
+                      <Text size="xs" c="dimmed">
+                        Aucun remboursement.
+                      </Text>
+                    ) : (
+                      <Stack gap="xs">
+                        {data?.reimbursements?.map((r: any) => (
+                          <Group key={r.id} justify="space-between" p="xs" style={{ backgroundColor: "#121829", borderRadius: 6 }}>
+                            <div>
+                              <Text size="sm" fw={600}>
+                                {r.title}
+                              </Text>
+                              <Text size="xs" c="cyan.4" fw={700}>
+                                +{r.amount.toFixed(2)} €
+                              </Text>
+                            </div>
+                            <Switch
+                              color="cyan"
+                              checked={r.processed}
+                              disabled={isReadOnly}
+                              onChange={() => handleToggleProcessed(r.id, "REVENUE", r.processed)}
+                            />
+                          </Group>
+                        ))}
+                      </Stack>
+                    )}
+                  </Paper>
+                </Grid.Col>
+
+                {/* Pointage Charges Récurrentes */}
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+                  <Paper p="md" radius="md" style={{ backgroundColor: "#182036" }}>
+                    <Text fw={700} c="indigo.4" mb={4}>
+                      Charges Récurrentes
+                    </Text>
+                    <Group justify="space-between" align="center" mb="sm" p="xs" style={{ backgroundColor: "#121829", borderRadius: 6, border: "1px solid rgba(255,255,255,0.05)" }}>
+                      <Text size="xs" c="dimmed">Restant à prélever :</Text>
+                      <Badge color="indigo" variant="light" size="sm">
+                        -{unprocessedRecurringTotal.toFixed(2)} €
+                      </Badge>
+                    </Group>
                     {data?.recurring?.length === 0 ? (
                       <Text size="xs" c="dimmed">
                         Aucune charge récurrente.
@@ -2125,11 +2440,17 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                 </Grid.Col>
 
                 {/* Pointage Échéances / Crédits */}
-                <Grid.Col span={{ base: 12, md: 4 }}>
+                <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
                   <Paper p="md" radius="md" style={{ backgroundColor: "#182036" }}>
-                    <Text fw={700} c="violet.4" mb="sm">
+                    <Text fw={700} c="violet.4" mb={4}>
                       Échéances Prélevées
                     </Text>
+                    <Group justify="space-between" align="center" mb="sm" p="xs" style={{ backgroundColor: "#121829", borderRadius: 6, border: "1px solid rgba(255,255,255,0.05)" }}>
+                      <Text size="xs" c="dimmed">Restant à prélever :</Text>
+                      <Badge color="violet" variant="light" size="sm">
+                        -{unprocessedInstallmentsTotal.toFixed(2)} €
+                      </Badge>
+                    </Group>
                     {data?.installments?.length === 0 ? (
                       <Text size="xs" c="dimmed">
                         Aucune échéance active ce mois-ci.
@@ -2188,69 +2509,71 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                         </Button>
                       )}
                     </Group>
-                    <Table>
+                    <Table highlightOnHover>
                       <Table.Thead>
                         <Table.Tr>
                           <Table.Th>Libellé</Table.Th>
                           <Table.Th>Type</Table.Th>
                           <Table.Th>Montant</Table.Th>
-                          {!isReadOnly && <Table.Th>Action</Table.Th>}
+                          {!isReadOnly && <Table.Th visibleFrom="md">Action</Table.Th>}
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {data?.revenues?.map((r: any) => (
-                          <Table.Tr key={r.id} style={r.hasOverride && r.amount === 0 ? { opacity: 0.4 } : undefined}>
-                            <Table.Td fw={600}>
-                              <Group gap={6}>
+                        {data?.revenues?.map((r: any) => {
+                          const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
+                          return (
+                            <Table.Tr
+                              key={r.id}
+                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                              onClick={() => handleRowClick(r, "REVENUE")}
+                            >
+                              <Table.Td fw={600}>
                                 <Text size="sm" fw={600}>{r.title}</Text>
-                                {r.hasOverride && r.amount === 0 && (
-                                  <Badge size="xs" color="gray" variant="outline">
-                                    Désactivé ce mois
-                                  </Badge>
-                                )}
-                              </Group>
-                            </Table.Td>
-                            <Table.Td>
-                              <Badge color={r.type === "FIXED" ? "teal" : "blue"} variant="light">
-                                {r.type === "FIXED" ? "Fixe" : "Variable"}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td fw={700} c={r.hasOverride && r.amount === 0 ? "dimmed" : "teal.4"}>
-                              +{r.amount.toFixed(2)} €
-                            </Table.Td>
-                            {!isReadOnly && (
-                              <Table.Td>
-                                <Group gap={4}>
-                                  <Tooltip label={r.hasOverride && r.amount === 0 ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                    <ActionIcon
-                                      color={r.hasOverride && r.amount === 0 ? "teal" : "gray"}
-                                      variant={r.hasOverride && r.amount === 0 ? "light" : "subtle"}
-                                      onClick={() => handleToggleDisableItem(r, "REVENUE")}
-                                    >
-                                      {r.hasOverride && r.amount === 0 ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <Tooltip label="Ajuster ou modifier">
-                                    <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                      id: r.id,
-                                      title: r.title,
-                                      type: "REVENUE",
-                                      subType: r.type,
-                                      currentAmount: r.amount,
-                                      originalAmount: r.originalAmount,
-                                      hasOverride: r.hasOverride,
-                                    })}>
-                                      <IconEdit size={16} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                </Group>
                               </Table.Td>
-                            )}
-                          </Table.Tr>
-                        ))}
+                              <Table.Td>
+                                <Badge color={r.type === "FIXED" ? "teal" : "blue"} variant="light">
+                                  {r.type === "FIXED" ? "Fixe" : "Variable"}
+                                </Badge>
+                              </Table.Td>
+                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : "teal.4"}>
+                                +{r.amount.toFixed(2)} €
+                              </Table.Td>
+                              {!isReadOnly && (
+                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
+                                  <Group gap={4}>
+                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                      <ActionIcon
+                                        color={isItemDisabled ? "teal" : "gray"}
+                                        variant={isItemDisabled ? "light" : "subtle"}
+                                        onClick={() => handleToggleDisableItem(r, "REVENUE")}
+                                      >
+                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <Tooltip label="Ajuster ou modifier">
+                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                        id: r.id,
+                                        title: r.title,
+                                        type: "REVENUE",
+                                        subType: r.type,
+                                        currentAmount: r.amount,
+                                        originalAmount: r.originalAmount,
+                                        overrideAmount: r.overrideAmount,
+                                        isDisabled: r.isDisabled,
+                                        hasOverride: r.hasOverride,
+                                      })}>
+                                        <IconEdit size={16} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
+                                      <IconTrash size={16} />
+                                    </ActionIcon>
+                                  </Group>
+                                </Table.Td>
+                              )}
+                            </Table.Tr>
+                          );
+                        })}
                       </Table.Tbody>
                       <Table.Tfoot>
                         <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
@@ -2262,7 +2585,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           <Table.Td fw={400} c="white">
                             +{data?.summary?.totalStandardRevenues ? data.summary.totalStandardRevenues.toFixed(2) : "0.00"} €
                           </Table.Td>
-                          <Table.Td />
+                          {!isReadOnly && <Table.Td visibleFrom="md" />}
                         </Table.Tr>
                       </Table.Tfoot>
                     </Table>
@@ -2288,63 +2611,65 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                         </Button>
                       )}
                     </Group>
-                    <Table>
+                    <Table highlightOnHover>
                       <Table.Thead>
                         <Table.Tr>
                           <Table.Th>Libellé</Table.Th>
                           <Table.Th>Montant</Table.Th>
-                          {!isReadOnly && <Table.Th>Action</Table.Th>}
+                          {!isReadOnly && <Table.Th visibleFrom="md">Action</Table.Th>}
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {data?.reimbursements?.map((r: any) => (
-                          <Table.Tr key={r.id} style={r.hasOverride && r.amount === 0 ? { opacity: 0.4 } : undefined}>
-                            <Table.Td fw={600}>
-                              <Group gap={6}>
+                        {data?.reimbursements?.map((r: any) => {
+                          const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
+                          return (
+                            <Table.Tr
+                              key={r.id}
+                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                              onClick={() => handleRowClick(r, "REIMBURSEMENT")}
+                            >
+                              <Table.Td fw={600}>
                                 <Text size="sm" fw={600}>{r.title}</Text>
-                                {r.hasOverride && r.amount === 0 && (
-                                  <Badge size="xs" color="gray" variant="outline">
-                                    Désactivé ce mois
-                                  </Badge>
-                                )}
-                              </Group>
-                            </Table.Td>
-                            <Table.Td fw={700} c={r.hasOverride && r.amount === 0 ? "dimmed" : "teal.4"}>
-                              +{r.amount.toFixed(2)} €
-                            </Table.Td>
-                            {!isReadOnly && (
-                              <Table.Td>
-                                <Group gap={4}>
-                                  <Tooltip label={r.hasOverride && r.amount === 0 ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                    <ActionIcon
-                                      color={r.hasOverride && r.amount === 0 ? "teal" : "gray"}
-                                      variant={r.hasOverride && r.amount === 0 ? "light" : "subtle"}
-                                      onClick={() => handleToggleDisableItem(r, "REVENUE")}
-                                    >
-                                      {r.hasOverride && r.amount === 0 ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <Tooltip label="Ajuster ou modifier">
-                                    <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                      id: r.id,
-                                      title: r.title,
-                                      type: "REVENUE",
-                                      subType: r.type,
-                                      currentAmount: r.amount,
-                                      originalAmount: r.originalAmount,
-                                      hasOverride: r.hasOverride,
-                                    })}>
-                                      <IconEdit size={16} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                </Group>
                               </Table.Td>
-                            )}
-                          </Table.Tr>
-                        ))}
+                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : "teal.4"}>
+                                +{r.amount.toFixed(2)} €
+                              </Table.Td>
+                              {!isReadOnly && (
+                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
+                                  <Group gap={4}>
+                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                      <ActionIcon
+                                        color={isItemDisabled ? "teal" : "gray"}
+                                        variant={isItemDisabled ? "light" : "subtle"}
+                                        onClick={() => handleToggleDisableItem(r, "REVENUE")}
+                                      >
+                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <Tooltip label="Ajuster ou modifier">
+                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                        id: r.id,
+                                        title: r.title,
+                                        type: "REVENUE",
+                                        subType: r.type,
+                                        currentAmount: r.amount,
+                                        originalAmount: r.originalAmount,
+                                        overrideAmount: r.overrideAmount,
+                                        isDisabled: r.isDisabled,
+                                        hasOverride: r.hasOverride,
+                                      })}>
+                                        <IconEdit size={16} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
+                                      <IconTrash size={16} />
+                                    </ActionIcon>
+                                  </Group>
+                                </Table.Td>
+                              )}
+                            </Table.Tr>
+                          );
+                        })}
                       </Table.Tbody>
                       <Table.Tfoot>
                         <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
@@ -2356,7 +2681,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           <Table.Td fw={400} c="white">
                             +{data?.summary?.totalReimbursements ? data.summary.totalReimbursements.toFixed(2) : "0.00"} €
                           </Table.Td>
-                          <Table.Td />
+                          {!isReadOnly && <Table.Td visibleFrom="md" />}
                         </Table.Tr>
                       </Table.Tfoot>
                     </Table>
@@ -2421,72 +2746,72 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                               )}
                             </Group>
                           </Table.Th>
-                          {!isReadOnly && <Table.Th>Actions</Table.Th>}
+                          {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {sortedRecurring.map((r: any) => (
-                          <Table.Tr key={r.id} style={r.hasOverride && r.amount === 0 ? { opacity: 0.4 } : undefined}>
-                            <Table.Td fw={600}>
-                              <Group gap={6}>
+                        {sortedRecurring.map((r: any) => {
+                          const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
+                          return (
+                            <Table.Tr
+                              key={r.id}
+                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                              onClick={() => handleRowClick(r, "RECURRING")}
+                            >
+                              <Table.Td fw={600}>
                                 <Text size="sm" fw={600}>{r.title}</Text>
-                                {r.hasOverride && r.amount === 0 && (
-                                  <Badge size="xs" color="gray" variant="outline">
-                                    Désactivé ce mois
-                                  </Badge>
+                                {r.startMonth && r.startYear && (
+                                  <Text size="xs" c="dimmed">
+                                    Depuis {r.startMonth < 10 ? `0${r.startMonth}` : r.startMonth}/{r.startYear}
+                                  </Text>
                                 )}
-                              </Group>
-                              {r.startMonth && r.startYear && (
-                                <Text size="xs" c="dimmed">
-                                  Depuis {r.startMonth < 10 ? `0${r.startMonth}` : r.startMonth}/{r.startYear}
-                                </Text>
-                              )}
-                            </Table.Td>
-                            <Table.Td>
-                              <Badge color={getCategoryColor(r.category)} variant="filled" size="sm">
-                                {r.category || "Général"}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td fw={600}>{r.dayOfMonth}</Table.Td>
-                            <Table.Td fw={700} c={r.hasOverride && r.amount === 0 ? "dimmed" : `${getCategoryColor(r.category)}.4`}>
-                              -{r.amount.toFixed(2)} €
-                            </Table.Td>
-                            {!isReadOnly && (
-                              <Table.Td>
-                                <Group gap={4}>
-                                  <Tooltip label={r.hasOverride && r.amount === 0 ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                    <ActionIcon
-                                      color={r.hasOverride && r.amount === 0 ? "teal" : "gray"}
-                                      variant={r.hasOverride && r.amount === 0 ? "light" : "subtle"}
-                                      onClick={() => handleToggleDisableItem(r, "RECURRING")}
-                                    >
-                                      {r.hasOverride && r.amount === 0 ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <Tooltip label="Ajuster ou modifier">
-                                    <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                      id: r.id,
-                                      title: r.title,
-                                      type: "RECURRING",
-                                      category: r.category,
-                                      dayOfMonth: r.dayOfMonth,
-                                      startMonth: r.startMonth,
-                                      startYear: r.startYear,
-                                      currentAmount: r.amount,
-                                      originalAmount: r.originalAmount,
-                                      hasOverride: r.hasOverride,
-                                    })}>
-                                      <IconEdit size={16} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <ActionIcon color="red" variant="subtle" onClick={() => deleteRecurringExpense(activeWalletId, r.id).then(loadData)}>
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                </Group>
                               </Table.Td>
-                            )}
-                          </Table.Tr>
-                        ))}
+                              <Table.Td>
+                                {renderCategoryBadge(r.category)}
+                              </Table.Td>
+                              <Table.Td fw={600}>{r.dayOfMonth}</Table.Td>
+                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : `${getCategoryColor(r.category)}.4`}>
+                                -{r.amount.toFixed(2)} €
+                              </Table.Td>
+                              {!isReadOnly && (
+                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
+                                  <Group gap={4}>
+                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                      <ActionIcon
+                                        color={isItemDisabled ? "teal" : "gray"}
+                                        variant={isItemDisabled ? "light" : "subtle"}
+                                        onClick={() => handleToggleDisableItem(r, "RECURRING")}
+                                      >
+                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <Tooltip label="Ajuster ou modifier">
+                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                        id: r.id,
+                                        title: r.title,
+                                        type: "RECURRING",
+                                        category: r.category,
+                                        dayOfMonth: r.dayOfMonth,
+                                        startMonth: r.startMonth,
+                                        startYear: r.startYear,
+                                        currentAmount: r.amount,
+                                        originalAmount: r.originalAmount,
+                                        overrideAmount: r.overrideAmount,
+                                        isDisabled: r.isDisabled,
+                                        hasOverride: r.hasOverride,
+                                      })}>
+                                        <IconEdit size={16} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteRecurringExpense(activeWalletId, r.id).then(loadData)}>
+                                      <IconTrash size={16} />
+                                    </ActionIcon>
+                                  </Group>
+                                </Table.Td>
+                              )}
+                            </Table.Tr>
+                          );
+                        })}
                       </Table.Tbody>
                       <Table.Tfoot>
                         <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
@@ -2498,7 +2823,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           <Table.Td fw={400} c="white">
                             -{data?.summary?.totalRecurring ? data.summary.totalRecurring.toFixed(2) : "0.00"} €
                           </Table.Td>
-                          {!isReadOnly && <Table.Td />}
+                          {!isReadOnly && <Table.Td visibleFrom="md" />}
                         </Table.Tr>
                       </Table.Tfoot>
                     </Table>
@@ -2523,80 +2848,77 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           <Table.Th>Libellé</Table.Th>
                           <Table.Th>Catégorie</Table.Th>
                           <Table.Th>Jour</Table.Th>
-                          <Table.Th>Période</Table.Th>
                           <Table.Th>Montant/Mois</Table.Th>
-                          {!isReadOnly && <Table.Th>Actions</Table.Th>}
+                          {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
-                        {data?.installments?.map((i: any) => (
-                          <Table.Tr key={i.id} style={i.hasOverride && i.amount === 0 ? { opacity: 0.4 } : undefined}>
-                            <Table.Td fw={600}>
-                              <Group gap={6}>
-                                <span>{i.title}</span>
-                                {i.hasOverride && i.amount === 0 && (
-                                  <Badge size="xs" color="gray" variant="outline">
-                                    Désactivé ce mois
-                                  </Badge>
-                                )}
-                              </Group>
-                            </Table.Td>
-                            <Table.Td>
-                              <Badge color={getCategoryColor(i.category)} variant="filled" size="sm">
-                                {i.category || "Général"}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td fw={600}>{i.dayOfMonth}</Table.Td>
-                            <Table.Td>
-                              <Text size="xs" c="dimmed">
-                                {i.startMonth}/{i.startYear} ➔ {i.endMonth}/{i.endYear}
-                              </Text>
-                            </Table.Td>
-                            <Table.Td fw={700} c={i.hasOverride && i.amount === 0 ? "dimmed" : `${getCategoryColor(i.category)}.4`}>
-                              -{i.amount.toFixed(2)} €
-                            </Table.Td>
-                            {!isReadOnly && (
-                              <Table.Td>
-                                <Group gap={4}>
-                                  <Tooltip label={i.hasOverride && i.amount === 0 ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                    <ActionIcon
-                                      color={i.hasOverride && i.amount === 0 ? "teal" : "gray"}
-                                      variant={i.hasOverride && i.amount === 0 ? "light" : "subtle"}
-                                      onClick={() => handleToggleDisableItem(i, "INSTALLMENT")}
-                                    >
-                                      {i.hasOverride && i.amount === 0 ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <Tooltip label="Modifier le crédit">
-                                    <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                      id: i.id,
-                                      title: i.title,
-                                      type: "INSTALLMENT",
-                                      category: i.category,
-                                      dayOfMonth: i.dayOfMonth,
-                                      startMonth: i.startMonth,
-                                      startYear: i.startYear,
-                                      endMonth: i.endMonth,
-                                      endYear: i.endYear,
-                                      currentAmount: i.amount,
-                                      originalAmount: i.originalAmount || i.amount,
-                                      hasOverride: Boolean(i.hasOverride),
-                                    })}>
-                                      <IconEdit size={16} />
-                                    </ActionIcon>
-                                  </Tooltip>
-                                  <ActionIcon color="red" variant="subtle" onClick={() => deleteInstallment(activeWalletId, i.id).then(loadData)}>
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                </Group>
+                        {data?.installments?.map((i: any) => {
+                          const isItemDisabled = Boolean(i.isDisabled || (i.hasOverride && i.amount === 0));
+                          return (
+                            <Table.Tr
+                              key={i.id}
+                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                              onClick={() => handleRowClick(i, "INSTALLMENT")}
+                            >
+                              <Table.Td fw={600}>
+                                <Text size="sm" fw={600}>{i.title}</Text>
+                                <Text size="xs" c="dimmed">
+                                  {i.startMonth}/{i.startYear} ➔ {i.endMonth}/{i.endYear}
+                                </Text>
                               </Table.Td>
-                            )}
-                          </Table.Tr>
-                        ))}
+                              <Table.Td>
+                                {renderCategoryBadge(i.category)}
+                              </Table.Td>
+                              <Table.Td fw={600}>{i.dayOfMonth}</Table.Td>
+                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : `${getCategoryColor(i.category)}.4`}>
+                                -{i.amount.toFixed(2)} €
+                              </Table.Td>
+                              {!isReadOnly && (
+                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
+                                  <Group gap={4}>
+                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                      <ActionIcon
+                                        color={isItemDisabled ? "teal" : "gray"}
+                                        variant={isItemDisabled ? "light" : "subtle"}
+                                        onClick={() => handleToggleDisableItem(i, "INSTALLMENT")}
+                                      >
+                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <Tooltip label="Modifier le crédit">
+                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                        id: i.id,
+                                        title: i.title,
+                                        type: "INSTALLMENT",
+                                        category: i.category,
+                                        dayOfMonth: i.dayOfMonth,
+                                        startMonth: i.startMonth,
+                                        startYear: i.startYear,
+                                        endMonth: i.endMonth,
+                                        endYear: i.endYear,
+                                        currentAmount: i.amount,
+                                        originalAmount: i.originalAmount || i.amount,
+                                        overrideAmount: i.overrideAmount,
+                                        isDisabled: i.isDisabled,
+                                        hasOverride: Boolean(i.hasOverride),
+                                      })}>
+                                        <IconEdit size={16} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteInstallment(activeWalletId, i.id).then(loadData)}>
+                                      <IconTrash size={16} />
+                                    </ActionIcon>
+                                  </Group>
+                                </Table.Td>
+                              )}
+                            </Table.Tr>
+                          );
+                        })}
                       </Table.Tbody>
                       <Table.Tfoot>
                         <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
-                          <Table.Td colSpan={4}>
+                          <Table.Td colSpan={3}>
                             <Text size="sm" fw={400} c="white">
                               Total
                             </Text>
@@ -2604,7 +2926,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           <Table.Td fw={400} c="white">
                             -{data?.summary?.totalInstallments ? data.summary.totalInstallments.toFixed(2) : "0.00"} €
                           </Table.Td>
-                          {!isReadOnly && <Table.Td />}
+                          {!isReadOnly && <Table.Td visibleFrom="md" />}
                         </Table.Tr>
                       </Table.Tfoot>
                     </Table>
@@ -2651,24 +2973,26 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                       <Table.Th>Libellé</Table.Th>
                       <Table.Th>Catégorie</Table.Th>
                       <Table.Th>Montant</Table.Th>
-                      {!isReadOnly && <Table.Th>Actions</Table.Th>}
+                      {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
                     {filteredTransactions.map((t: any) => (
-                      <Table.Tr key={t.id}>
+                      <Table.Tr
+                        key={t.id}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => handleRowClick(t, "TRANSACTION")}
+                      >
                         <Table.Td fw={600}>{t.day}</Table.Td>
                         <Table.Td>{t.title}</Table.Td>
                         <Table.Td>
-                          <Badge color={getCategoryColor(t.category)} variant="filled" size="sm">
-                            {t.category}
-                          </Badge>
+                          {renderCategoryBadge(t.category)}
                         </Table.Td>
                         <Table.Td fw={700} c={`${getCategoryColor(t.category)}.4`}>
                           -{t.amount.toFixed(2)} €
                         </Table.Td>
                         {!isReadOnly && (
-                          <Table.Td>
+                          <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
                             <Group gap={4}>
                               <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditTransaction(t)}>
                                 <IconPencil size={16} />
@@ -2706,11 +3030,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                         size="xs"
                         color="cyan"
                         leftSection={<IconArrowsExchange size={14} />}
-                        onClick={() => {
-                          const otherWallet = wallets.find((w) => w.id !== activeWalletId);
-                          if (otherWallet) setTransferTargetWalletId(otherWallet.id);
-                          setTransferModal(true);
-                        }}
+                        onClick={handleOpenAddTransfer}
                       >
                         Nouveau Virement Inter-Portefeuille
                       </Button>
@@ -2732,47 +3052,62 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           <Table highlightOnHover>
                             <Table.Thead>
                               <Table.Tr>
-                                <Table.Th>Pointé</Table.Th>
                                 <Table.Th>Motif</Table.Th>
                                 <Table.Th>Destinataire</Table.Th>
                                 <Table.Th>Montant</Table.Th>
-                                {!isReadOnly && <Table.Th>Action</Table.Th>}
+                                {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
                               </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
-                              {data.transfersSent.map((t: any) => (
-                                <Table.Tr key={t.id}>
-                                  <Table.Td>
-                                    <Checkbox
-                                      checked={t.processed}
-                                      onChange={() => handleToggleProcessed(t.id, "TRANSFER" as any, t.processed)}
-                                      color="cyan"
-                                    />
-                                  </Table.Td>
-                                  <Table.Td fw={600}>{t.title}</Table.Td>
-                                  <Table.Td>
-                                    <Badge color="cyan" variant="light" size="sm">
-                                      {t.targetWallet?.name || "Portefeuille"}
-                                    </Badge>
-                                  </Table.Td>
-                                  <Table.Td fw={700} c="cyan.4">
-                                    {t.isPercentage ? (
-                                      <Badge color="cyan" variant="filled" size="sm">
-                                        {t.percentage}% (-{t.amount.toFixed(2)} €)
-                                      </Badge>
-                                    ) : (
-                                      `-${t.amount.toFixed(2)} €`
-                                    )}
-                                  </Table.Td>
-                                  {!isReadOnly && (
+                              {data.transfersSent.map((t: any) => {
+                                const isItemDisabled = Boolean(t.isDisabled || (t.hasOverride && t.amount === 0));
+                                return (
+                                  <Table.Tr
+                                    key={t.id}
+                                    style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                                    onClick={() => handleRowClick(t, "TRANSFER")}
+                                  >
+                                    <Table.Td fw={600}>{t.title}</Table.Td>
                                     <Table.Td>
-                                      <ActionIcon color="red" variant="subtle" onClick={() => deleteWalletTransfer(activeWalletId, t.id).then(loadData)}>
-                                        <IconTrash size={16} />
-                                      </ActionIcon>
+                                      <Badge color="cyan" variant="light" size="sm">
+                                        {t.targetWallet?.name || "Portefeuille"}
+                                      </Badge>
                                     </Table.Td>
-                                  )}
-                                </Table.Tr>
-                              ))}
+                                    <Table.Td fw={700} c={isItemDisabled ? "dimmed" : "cyan.4"}>
+                                      {t.isPercentage ? (
+                                        <Badge color="cyan" variant="filled" size="sm">
+                                          {t.percentage}% (-{t.amount.toFixed(2)} €)
+                                        </Badge>
+                                      ) : (
+                                        `-${t.amount.toFixed(2)} €`
+                                      )}
+                                    </Table.Td>
+                                    {!isReadOnly && (
+                                      <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
+                                        <Group gap={4}>
+                                          <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                            <ActionIcon
+                                              color={isItemDisabled ? "teal" : "gray"}
+                                              variant={isItemDisabled ? "light" : "subtle"}
+                                              onClick={() => handleToggleDisableItem(t, "TRANSFER" as any)}
+                                            >
+                                              {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                            </ActionIcon>
+                                          </Tooltip>
+                                          <Tooltip label="Modifier le virement">
+                                            <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditTransfer(t)}>
+                                              <IconEdit size={16} />
+                                            </ActionIcon>
+                                          </Tooltip>
+                                          <ActionIcon color="red" variant="subtle" onClick={() => deleteWalletTransfer(activeWalletId, t.id).then(loadData)}>
+                                            <IconTrash size={16} />
+                                          </ActionIcon>
+                                        </Group>
+                                      </Table.Td>
+                                    )}
+                                  </Table.Tr>
+                                );
+                              })}
                             </Table.Tbody>
                           </Table>
                         )}
@@ -3086,16 +3421,39 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                       Préconfigurez vos achats souhaités et déclenchez le paiement au moment voulu.
                     </Text>
                   </div>
-                  {!isReadOnly && (
-                    <Button
+                  <Group gap="xs" wrap="wrap">
+                    <Select
                       size="xs"
-                      color="cyan"
-                      leftSection={<IconPlus size={14} />}
-                      onClick={handleOpenAddWishlist}
-                    >
-                      Ajouter un souhait d'achat
-                    </Button>
-                  )}
+                      aria-label="Trier la liste d'achat"
+                      value={`${wishlistSortField}-${wishlistSortOrder}`}
+                      onChange={(val) => {
+                        if (!val) return;
+                        const [field, order] = val.split("-") as [any, any];
+                        setWishlistSortField(field);
+                        setWishlistSortOrder(order);
+                      }}
+                      data={[
+                        { label: "Criticité (Plus urgente d'abord)", value: "priority-desc" },
+                        { label: "Criticité (Moins urgente d'abord)", value: "priority-asc" },
+                        { label: "Montant (Décroissant)", value: "amount-desc" },
+                        { label: "Montant (Croissant)", value: "amount-asc" },
+                        { label: "Libellé (A-Z)", value: "title-asc" },
+                        { label: "Libellé (Z-A)", value: "title-desc" },
+                        { label: "Catégorie (A-Z)", value: "category-asc" },
+                      ]}
+                      style={{ width: 230 }}
+                    />
+                    {!isReadOnly && (
+                      <Button
+                        size="xs"
+                        color="cyan"
+                        leftSection={<IconPlus size={14} />}
+                        onClick={handleOpenAddWishlist}
+                      >
+                        Ajouter un souhait d'achat
+                      </Button>
+                    )}
+                  </Group>
                 </Group>
 
                 {(!data?.wishlistItems || data.wishlistItems.length === 0) ? (
@@ -3123,16 +3481,52 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                             }}
                           />
                         </Table.Th>
-                        <Table.Th>Libellé / Article</Table.Th>
-                        <Table.Th>Priorité</Table.Th>
-                        <Table.Th>Catégorie</Table.Th>
-                        <Table.Th>Montant Estimé</Table.Th>
-                        <Table.Th>Lien</Table.Th>
-                        {!isReadOnly && <Table.Th>Actions & Conversion</Table.Th>}
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("title")}>
+                          <Group gap={4} wrap="nowrap">
+                            <span>Libellé</span>
+                            {wishlistSortField === "title" ? (
+                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                            ) : (
+                              <IconSelector size={14} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("priority")}>
+                          <Group gap={4} wrap="nowrap">
+                            <span>Priorité</span>
+                            {wishlistSortField === "priority" ? (
+                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                            ) : (
+                              <IconSelector size={14} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("category")}>
+                          <Group gap={4} wrap="nowrap">
+                            <span>Catégorie</span>
+                            {wishlistSortField === "category" ? (
+                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                            ) : (
+                              <IconSelector size={14} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("amount")}>
+                          <Group gap={4} wrap="nowrap">
+                            <span>Montant Estimé</span>
+                            {wishlistSortField === "amount" ? (
+                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                            ) : (
+                              <IconSelector size={14} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        <Table.Th visibleFrom="md">Lien</Table.Th>
+                        {!isReadOnly && <Table.Th visibleFrom="md">Actions & Conversion</Table.Th>}
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
-                      {data.wishlistItems.map((item: any) => {
+                      {sortedWishlistItems.map((item: any) => {
                         const isSelected = selectedWishlistIds.includes(item.id);
                         let pColor = "blue";
                         let pLabel = "Normal";
@@ -3142,8 +3536,12 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                         else if (item.priority === "LOW") { pColor = "gray"; pLabel = "Faible"; }
 
                         return (
-                          <Table.Tr key={item.id}>
-                            <Table.Td>
+                          <Table.Tr
+                            key={item.id}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleRowClick(item, "WISHLIST")}
+                          >
+                            <Table.Td onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 size="xs"
                                 color="cyan"
@@ -3171,14 +3569,12 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                               </Badge>
                             </Table.Td>
                             <Table.Td>
-                              <Badge color={getCategoryColor(item.category)} variant="filled" size="sm">
-                                {item.category || "Général"}
-                              </Badge>
+                              {renderCategoryBadge(item.category)}
                             </Table.Td>
                             <Table.Td fw={700} c="cyan.4">
                               {item.amount.toFixed(2)} €
                             </Table.Td>
-                            <Table.Td>
+                            <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
                               {item.url ? (
                                 <Tooltip label="Ouvrir le lien marchand">
                                   <ActionIcon
@@ -3198,7 +3594,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                               )}
                             </Table.Td>
                             {!isReadOnly && (
-                              <Table.Td>
+                              <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
                                 <Group gap={6}>
                                   <Button
                                     size="xs"
@@ -3224,6 +3620,27 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                         );
                       })}
                     </Table.Tbody>
+                    <Table.Tfoot>
+                      <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+                        <Table.Td colSpan={4}>
+                          <Group justify="space-between" align="center">
+                            <Text size="sm" fw={700} c="white">
+                              Total de la liste ({data.wishlistItems.length} article{data.wishlistItems.length > 1 ? "s" : ""})
+                            </Text>
+                            {wishlistCalc.selectedItems.length > 0 && (
+                              <Badge size="xs" color="cyan" variant="light">
+                                Sélection : {wishlistCalc.selectedTotalAmount.toFixed(2)} € ({wishlistCalc.selectedItems.length})
+                              </Badge>
+                            )}
+                          </Group>
+                        </Table.Td>
+                        <Table.Td fw={800} c="cyan.3" style={{ fontSize: "15px" }}>
+                          {data.wishlistItems.reduce((acc: number, item: any) => acc + item.amount, 0).toFixed(2)} €
+                        </Table.Td>
+                        <Table.Td visibleFrom="md" />
+                        {!isReadOnly && <Table.Td visibleFrom="md" />}
+                      </Table.Tr>
+                    </Table.Tfoot>
                   </Table>
                 )}
               </Paper>
@@ -3434,8 +3851,8 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               value={entryFrequency}
               onChange={(val) => setEntryFrequency(val as "FIXED" | "VARIABLE")}
               data={[
-                { label: "Fixe (Mensuel)", value: "FIXED" },
-                { label: "Variable (Ponctuel)", value: "VARIABLE" },
+                { label: "Fixe", value: "FIXED" },
+                { label: "Variable", value: "VARIABLE" },
               ]}
             />
           </Stack>
@@ -3765,8 +4182,8 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   value={editEntryFrequency}
                   onChange={(val) => setEditEntryFrequency(val as "FIXED" | "VARIABLE")}
                   data={[
-                    { label: "Fixe (Mensuel)", value: "FIXED" },
-                    { label: "Variable (Ponctuel)", value: "VARIABLE" },
+                    { label: "Fixe", value: "FIXED" },
+                    { label: "Variable", value: "VARIABLE" },
                   ]}
                 />
               </Stack>
@@ -3782,11 +4199,11 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
             <Stack gap="xs" mt="xs">
               <Radio
                 value="MONTH"
-                label={`Ajustement ponctuel pour ${getMonthLabel(month)} ${year}`}
+                label={`Ajustement ponctuel`}
               />
               <Radio
                 value="GLOBAL"
-                label="Modification globale du montant (tous les mois)"
+                label="Modification globale"
               />
             </Stack>
           </Radio.Group>
@@ -3893,7 +4310,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
       <Modal
         opened={transferModal}
         onClose={() => setTransferModal(false)}
-        title="Effectuer un Virement Inter-Portefeuille"
+        title={editingTransferId ? "Modifier le Virement Inter-Portefeuille" : "Effectuer un Virement Inter-Portefeuille"}
         centered
       >
         <Stack gap="md">
@@ -3921,8 +4338,8 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               value={transferIsRecurring ? "RECURRING" : "ONE_TIME"}
               onChange={(val) => setTransferIsRecurring(val === "RECURRING")}
               data={[
-                { label: "Récurrent (Chaque mois)", value: "RECURRING" },
-                { label: "Ponctuel (Ce mois-ci)", value: "ONE_TIME" },
+                { label: "Récurrent", value: "RECURRING" },
+                { label: "Ponctuel", value: "ONE_TIME" },
               ]}
             />
           </Stack>
@@ -3934,8 +4351,8 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               value={transferType}
               onChange={(val) => setTransferType(val as "FIXED" | "PERCENTAGE")}
               data={[
-                { label: "Montant Fixe (€)", value: "FIXED" },
-                { label: "Pourcentage du solde disponible (%)", value: "PERCENTAGE" },
+                { label: "Montant", value: "FIXED" },
+                { label: "Pourcentage", value: "PERCENTAGE" },
               ]}
             />
           </Stack>
@@ -3980,9 +4397,276 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
             </Stack>
           )}
           <Button color="cyan" fullWidth onClick={handleAddTransfer}>
-            Valider le Virement
+            {editingTransferId ? "Enregistrer les modifications" : "Valider le Virement"}
           </Button>
         </Stack>
+      </Modal>
+
+      {/* Modal d'Actions Rapides sur Éléments (Tab 3 - Revenus & Charges fixes) */}
+      <Modal
+        opened={Boolean(actionModalItem)}
+        onClose={() => setActionModalItem(null)}
+        title={actionModalItem?.item?.title || "Choisir une action"}
+        centered
+        radius="md"
+      >
+        {actionModalItem && (
+          <Stack gap="sm">
+            <Group justify="space-between" mb="xs">
+              <Text size="sm" c="dimmed">
+                {actionModalItem.type === "REVENUE"
+                  ? "Revenu du mois"
+                  : actionModalItem.type === "REIMBURSEMENT"
+                  ? "Remboursement"
+                  : actionModalItem.type === "RECURRING"
+                  ? "Charge récurrente"
+                  : actionModalItem.type === "INSTALLMENT"
+                  ? "Paiement échelonné / Crédit"
+                  : actionModalItem.type === "TRANSFER"
+                  ? "Virement inter-portefeuille"
+                  : actionModalItem.type === "WISHLIST"
+                  ? "Souhait d'achat"
+                  : "Dépense courante"}
+              </Text>
+              <Text
+                size="lg"
+                fw={800}
+                c={
+                  actionModalItem.type === "REVENUE" || actionModalItem.type === "REIMBURSEMENT"
+                    ? "teal.4"
+                    : actionModalItem.type === "TRANSFER" || actionModalItem.type === "WISHLIST"
+                    ? "cyan.4"
+                    : "red.4"
+                }
+              >
+                {actionModalItem.type === "REVENUE" || actionModalItem.type === "REIMBURSEMENT" ? "+" : "-"}
+                {actionModalItem.item.amount.toFixed(2)} €
+              </Text>
+            </Group>
+
+            {!isReadOnly && (
+              <>
+                {actionModalItem.type === "TRANSACTION" ? (
+                  <>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="blue"
+                      leftSection={<IconPencil size={18} />}
+                      onClick={() => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        handleOpenEditTransaction(item);
+                      }}
+                    >
+                      Modifier la dépense
+                    </Button>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="red"
+                      leftSection={<IconTrash size={18} />}
+                      onClick={async () => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        await deleteTransaction(activeWalletId, item.id);
+                        await loadData();
+                      }}
+                    >
+                      Supprimer définitivement
+                    </Button>
+                  </>
+                ) : actionModalItem.type === "WISHLIST" ? (
+                  <>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="teal"
+                      leftSection={<IconShoppingCart size={18} />}
+                      onClick={() => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        handleOpenConvertWishlist(item);
+                      }}
+                    >
+                      Déclencher l'achat (Convertir)
+                    </Button>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="blue"
+                      leftSection={<IconEdit size={18} />}
+                      onClick={() => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        handleOpenEditWishlist(item);
+                      }}
+                    >
+                      Modifier le souhait d'achat
+                    </Button>
+                    {actionModalItem.item.url && (
+                      <Button
+                        fullWidth
+                        component="a"
+                        href={actionModalItem.item.url.startsWith("http") ? actionModalItem.item.url : `https://${actionModalItem.item.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        variant="light"
+                        color="cyan"
+                        leftSection={<IconExternalLink size={18} />}
+                        onClick={() => setActionModalItem(null)}
+                      >
+                        Ouvrir le lien marchand
+                      </Button>
+                    )}
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="red"
+                      leftSection={<IconTrash size={18} />}
+                      onClick={async () => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        await handleDeleteWishlist(item.id);
+                      }}
+                    >
+                      Supprimer définitivement
+                    </Button>
+                  </>
+                ) : actionModalItem.type === "TRANSFER" ? (
+                  <>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color={actionModalItem.item.isDisabled || (actionModalItem.item.hasOverride && actionModalItem.item.amount === 0) ? "teal" : "orange"}
+                      leftSection={
+                        actionModalItem.item.isDisabled || (actionModalItem.item.hasOverride && actionModalItem.item.amount === 0) ? (
+                          <IconEye size={18} />
+                        ) : (
+                          <IconEyeOff size={18} />
+                        )
+                      }
+                      onClick={async () => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        await handleToggleDisableItem(item, "TRANSFER" as any);
+                      }}
+                    >
+                      {actionModalItem.item.isDisabled || (actionModalItem.item.hasOverride && actionModalItem.item.amount === 0)
+                        ? "Réactiver ce virement ce mois-ci"
+                        : "Désactiver ce virement ce mois-ci"}
+                    </Button>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="blue"
+                      leftSection={<IconEdit size={18} />}
+                      onClick={() => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        handleOpenEditTransfer(item);
+                      }}
+                    >
+                      Modifier le virement
+                    </Button>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="red"
+                      leftSection={<IconTrash size={18} />}
+                      onClick={async () => {
+                        const item = actionModalItem.item;
+                        setActionModalItem(null);
+                        await deleteWalletTransfer(activeWalletId, item.id);
+                        await loadData();
+                      }}
+                    >
+                      Supprimer définitivement
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color={actionModalItem.item.isDisabled || (actionModalItem.item.hasOverride && actionModalItem.item.amount === 0) ? "teal" : "orange"}
+                      leftSection={
+                        actionModalItem.item.isDisabled || (actionModalItem.item.hasOverride && actionModalItem.item.amount === 0) ? (
+                          <IconEye size={18} />
+                        ) : (
+                          <IconEyeOff size={18} />
+                        )
+                      }
+                      onClick={async () => {
+                        const item = actionModalItem.item;
+                        const type = actionModalItem.type === "REIMBURSEMENT" ? "REVENUE" : actionModalItem.type;
+                        setActionModalItem(null);
+                        await handleToggleDisableItem(item, type as any);
+                      }}
+                    >
+                      {actionModalItem.item.isDisabled || (actionModalItem.item.hasOverride && actionModalItem.item.amount === 0)
+                        ? "Réactiver cet élément ce mois-ci"
+                        : "Désactiver cet élément ce mois-ci"}
+                    </Button>
+
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="blue"
+                      leftSection={<IconEdit size={18} />}
+                      onClick={() => {
+                        const item = actionModalItem.item;
+                        const type = actionModalItem.type === "REIMBURSEMENT" ? "REVENUE" : actionModalItem.type;
+                        setActionModalItem(null);
+                        handleOpenEditModal({
+                          id: item.id,
+                          title: item.title,
+                          type: type as any,
+                          subType: item.type,
+                          category: item.category,
+                          dayOfMonth: item.dayOfMonth,
+                          startMonth: item.startMonth,
+                          startYear: item.startYear,
+                          endMonth: item.endMonth,
+                          endYear: item.endYear,
+                          currentAmount: item.amount,
+                          originalAmount: item.originalAmount || item.amount,
+                          overrideAmount: item.overrideAmount,
+                          isDisabled: item.isDisabled,
+                          hasOverride: Boolean(item.hasOverride),
+                        });
+                      }}
+                    >
+                      Modifier ou ajuster le montant
+                    </Button>
+
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="red"
+                      leftSection={<IconTrash size={18} />}
+                      onClick={async () => {
+                        const item = actionModalItem.item;
+                        const type = actionModalItem.type;
+                        setActionModalItem(null);
+                        if (type === "REVENUE" || type === "REIMBURSEMENT") {
+                          await deleteRevenue(activeWalletId, item.id);
+                        } else if (type === "RECURRING") {
+                          await deleteRecurringExpense(activeWalletId, item.id);
+                        } else if (type === "INSTALLMENT") {
+                          await deleteInstallment(activeWalletId, item.id);
+                        }
+                        await loadData();
+                      }}
+                    >
+                      Supprimer définitivement
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </Stack>
+        )}
       </Modal>
 
       {/* Modal Créer / Modifier Souhait d'Achat */}

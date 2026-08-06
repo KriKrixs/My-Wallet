@@ -493,12 +493,46 @@ export async function updateInstallmentGlobal(
 
 export async function getBudgets(walletId: string, month: number, year: number) {
   await requireWalletAccess(walletId, "READ_ONLY");
-  const whereClause: any = { walletId, year };
-  if (month > 0) whereClause.month = month;
-  return db.budgetEnvelope.findMany({
-    where: whereClause,
-    orderBy: { category: "asc" },
+
+  if (month === 0) {
+    return db.budgetEnvelope.findMany({
+      where: { walletId, year },
+      orderBy: { category: "asc" },
+    });
+  }
+
+  // Récupérer toutes les enveloppes définies jusqu'au mois/année demandé inclus
+  const allPriorOrEqualBudgets = await db.budgetEnvelope.findMany({
+    where: {
+      walletId,
+      OR: [
+        { year: { lt: year } },
+        { year, month: { lte: month } },
+      ],
+    },
+    orderBy: [
+      { year: "desc" },
+      { month: "desc" },
+    ],
   });
+
+  // Conserver l'enveloppe la plus récente pour chaque catégorie
+  const latestByCategory = new Map<string, any>();
+  for (const b of allPriorOrEqualBudgets) {
+    const key = b.category.toLowerCase();
+    if (!latestByCategory.has(key)) {
+      latestByCategory.set(key, b);
+    }
+  }
+
+  const result = Array.from(latestByCategory.values()).map((b) => ({
+    ...b,
+    month,
+    year,
+  }));
+
+  result.sort((a, b) => a.category.localeCompare(b.category));
+  return result;
 }
 
 export async function saveBudgetEnvelope(
@@ -506,6 +540,8 @@ export async function saveBudgetEnvelope(
   data: { category: string; limitAmount: number; color: string; month: number; year: number }
 ) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
+
+  // 1. Upsert pour le mois cible
   const envelope = await db.budgetEnvelope.upsert({
     where: {
       walletId_category_month_year: {
@@ -529,7 +565,24 @@ export async function saveBudgetEnvelope(
     },
   });
 
-  // Mettre à jour la couleur globalement sur toutes les enveloppes existantes de cette catégorie
+  // 2. Mettre à jour tous les mois FUTURS (month > data.month ou year > data.year) pour cette catégorie
+  // Sans toucher aux mois d'AVANT
+  await db.budgetEnvelope.updateMany({
+    where: {
+      walletId,
+      category: data.category,
+      OR: [
+        { year: { gt: data.year } },
+        { year: data.year, month: { gt: data.month } },
+      ],
+    },
+    data: {
+      limitAmount: data.limitAmount,
+      ...(data.color ? { color: data.color } : {}),
+    },
+  });
+
+  // 3. Mettre à jour la couleur sur tous les mois existants de cette catégorie
   if (data.color) {
     await db.budgetEnvelope.updateMany({
       where: {
@@ -713,16 +766,76 @@ export async function setExpenseOverride(
         year: data.year,
       },
     },
-    update: { amount: data.amount },
+    update: { amount: data.amount, isDisabled: false },
     create: {
       walletId,
       paymentId: data.paymentId,
       type: data.type,
       amount: data.amount,
+      isDisabled: false,
       month: data.month,
       year: data.year,
     },
   });
+
+  revalidatePath("/");
+}
+
+export async function toggleDisableItem(
+  walletId: string,
+  data: {
+    paymentId: string;
+    type: "REVENUE" | "RECURRING" | "INSTALLMENT" | "TRANSFER";
+    month: number;
+    year: number;
+  }
+) {
+  await requireWalletAccess(walletId, "FULL_ACCESS");
+
+  const existing = await db.expenseOverride.findUnique({
+    where: {
+      walletId_paymentId_type_month_year: {
+        walletId,
+        paymentId: data.paymentId,
+        type: data.type,
+        month: data.month,
+        year: data.year,
+      },
+    },
+  });
+
+  if (existing) {
+    const isCurrentlyDisabled = existing.isDisabled || existing.amount === 0;
+    if (isCurrentlyDisabled) {
+      if (existing.amount === null || existing.amount === undefined || existing.amount === 0) {
+        await db.expenseOverride.delete({
+          where: { id: existing.id },
+        });
+      } else {
+        await db.expenseOverride.update({
+          where: { id: existing.id },
+          data: { isDisabled: false },
+        });
+      }
+    } else {
+      await db.expenseOverride.update({
+        where: { id: existing.id },
+        data: { isDisabled: true },
+      });
+    }
+  } else {
+    await db.expenseOverride.create({
+      data: {
+        walletId,
+        paymentId: data.paymentId,
+        type: data.type,
+        month: data.month,
+        year: data.year,
+        amount: null,
+        isDisabled: true,
+      },
+    });
+  }
 
   revalidatePath("/");
 }
@@ -865,6 +978,27 @@ export async function createWalletTransfer(
   return transfer;
 }
 
+export async function updateWalletTransfer(
+  walletId: string,
+  id: string,
+  data: {
+    title?: string;
+    amount?: number;
+    isPercentage?: boolean;
+    percentage?: number;
+    targetWalletId?: string;
+    dayOfMonth?: number;
+  }
+) {
+  await requireWalletAccess(walletId, "FULL_ACCESS");
+  const transfer = await db.walletTransfer.update({
+    where: { id },
+    data,
+  });
+  revalidatePath("/");
+  return transfer;
+}
+
 export async function deleteWalletTransfer(walletId: string, id: string) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
   await db.walletTransfer.delete({ where: { id } });
@@ -875,6 +1009,12 @@ const MONTH_NAMES = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
 ];
+
+function getEffectiveOverrideAmount(baseAmount: number, ov?: { amount: number | null; isDisabled: boolean }) {
+  if (!ov) return baseAmount;
+  if (ov.isDisabled || ov.amount === 0) return 0;
+  return ov.amount !== null && ov.amount !== undefined ? ov.amount : baseAmount;
+}
 
 async function calculateWalletMonthlyNet(walletId: string, month: number, year: number): Promise<number> {
   const [revenues, recurring, installments, transactions, overrides, rawTransfersSent, rawTransfersReceived, envelopes] = await Promise.all([
@@ -902,7 +1042,7 @@ async function calculateWalletMonthlyNet(walletId: string, month: number, year: 
 
   const revTotal = revenues.reduce((acc, r) => {
     const ov = overrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && o.month === month);
-    return acc + (ov ? ov.amount : r.amount);
+    return acc + getEffectiveOverrideAmount(r.amount, ov);
   }, 0);
 
   const transfersSent = rawTransfersSent.filter((t) => {
@@ -920,7 +1060,7 @@ async function calculateWalletMonthlyNet(walletId: string, month: number, year: 
   let transfersReceivedTotal = 0;
   for (const t of transfersReceived) {
     let amt = t.amount;
-    if (t.isPercentage && t.percentage && t.percentage > 0) {
+    if ((amt === 0 || amt === null) && t.isPercentage && t.percentage && t.percentage > 0) {
       const [sRevenues, sRecurring, sInstallments, sOverrides] = await Promise.all([
         getRevenues(t.sourceWalletId, month, year),
         getRecurringExpenses(t.sourceWalletId, month, year),
@@ -929,15 +1069,15 @@ async function calculateWalletMonthlyNet(walletId: string, month: number, year: 
       ]);
       const sRev = sRevenues.reduce((acc, r) => {
         const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && o.month === month);
-        return acc + (ov ? ov.amount : r.amount);
+        return acc + getEffectiveOverrideAmount(r.amount, ov);
       }, 0);
       const sRec = sRecurring.reduce((acc, r) => {
         const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === month);
-        return acc + (ov ? ov.amount : r.amount);
+        return acc + getEffectiveOverrideAmount(r.amount, ov);
       }, 0);
       const sInst = sInstallments.reduce((acc, i) => {
         const ov = sOverrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && o.month === month);
-        return acc + (ov ? ov.amount : i.amount);
+        return acc + getEffectiveOverrideAmount(i.amount, ov);
       }, 0);
       const sBase = Math.max(0, sRev - (sRec + sInst) - envLimitsSum);
       amt = Math.round((t.percentage / 100) * sBase * 100) / 100;
@@ -948,14 +1088,14 @@ async function calculateWalletMonthlyNet(walletId: string, month: number, year: 
   let transfersSentTotal = 0;
   for (const t of transfersSent) {
     let amt = t.amount;
-    if (t.isPercentage && t.percentage && t.percentage > 0) {
+    if ((amt === 0 || amt === null) && t.isPercentage && t.percentage && t.percentage > 0) {
       const recTotal = recurring.reduce((acc, r) => {
         const ov = overrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === month);
-        return acc + (ov ? ov.amount : r.amount);
+        return acc + getEffectiveOverrideAmount(r.amount, ov);
       }, 0);
       const instTotal = installments.reduce((acc, i) => {
         const ov = overrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && o.month === month);
-        return acc + (ov ? ov.amount : i.amount);
+        return acc + getEffectiveOverrideAmount(i.amount, ov);
       }, 0);
       const base = Math.max(0, revTotal - (recTotal + instTotal) - envLimitsSum);
       amt = Math.round((t.percentage / 100) * base * 100) / 100;
@@ -965,12 +1105,12 @@ async function calculateWalletMonthlyNet(walletId: string, month: number, year: 
 
   const recTotal = recurring.reduce((acc, r) => {
     const ov = overrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && o.month === month);
-    return acc + (ov ? ov.amount : r.amount);
+    return acc + getEffectiveOverrideAmount(r.amount, ov);
   }, 0);
 
   const instTotal = installments.reduce((acc, i) => {
     const ov = overrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && o.month === month);
-    return acc + (ov ? ov.amount : i.amount);
+    return acc + getEffectiveOverrideAmount(i.amount, ov);
   }, 0);
 
   const trxTotal = transactions.reduce((acc, t) => acc + t.amount, 0);
@@ -1134,7 +1274,7 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   let hasManualDeficit = false;
 
   if (manualDeficitOv) {
-    previousMonthDeficit = manualDeficitOv.amount;
+    previousMonthDeficit = manualDeficitOv.amount ?? 0;
     hasManualDeficit = true;
   } else {
     previousMonthDeficit = prevMonthCarryoverInfo.deficit;
@@ -1145,11 +1285,15 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     const ov = overrides.find(
       (o) => o.paymentId === r.id && o.type === "REVENUE" && (month === 0 || o.month === month)
     );
-    const amount = ov ? ov.amount : r.amount;
+    const isDisabled = ov ? (ov.isDisabled || ov.amount === 0) : false;
+    const overrideAmount = (ov && ov.amount !== null && ov.amount !== undefined && ov.amount > 0) ? ov.amount : r.amount;
+    const amount = isDisabled ? 0 : overrideAmount;
     return {
       ...r,
       amount,
+      overrideAmount,
       originalAmount: r.amount,
+      isDisabled,
       hasOverride: !!ov,
       processed: processed.some((p) => p.paymentId === r.id && p.type === "REVENUE"),
     };
@@ -1160,11 +1304,15 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     const ov = overrides.find(
       (o) => o.paymentId === r.id && o.type === "RECURRING" && (month === 0 || o.month === month)
     );
-    const amount = ov ? ov.amount : r.amount;
+    const isDisabled = ov ? (ov.isDisabled || ov.amount === 0) : false;
+    const overrideAmount = (ov && ov.amount !== null && ov.amount !== undefined && ov.amount > 0) ? ov.amount : r.amount;
+    const amount = isDisabled ? 0 : overrideAmount;
     return {
       ...r,
       amount,
+      overrideAmount,
       originalAmount: r.amount,
+      isDisabled,
       hasOverride: !!ov,
       processed: processed.some((p) => p.paymentId === r.id && p.type === "RECURRING"),
     };
@@ -1190,7 +1338,9 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     const ov = overrides.find(
       (o) => o.paymentId === i.id && o.type === "INSTALLMENT" && (targetM === 0 || o.month === targetM)
     );
-    const amount = ov ? ov.amount : i.amount;
+    const isDisabled = ov ? (ov.isDisabled || ov.amount === 0) : false;
+    const overrideAmount = (ov && ov.amount !== null && ov.amount !== undefined && ov.amount > 0) ? ov.amount : i.amount;
+    const amount = isDisabled ? 0 : overrideAmount;
     const isCredit = isCreditCategory(i.category);
     
     const totalMonths = Math.max(1, (i.endYear - i.startYear) * 12 + (i.endMonth - i.startMonth) + 1);
@@ -1223,7 +1373,9 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     return {
       ...i,
       amount,
+      overrideAmount,
       originalAmount: i.amount,
+      isDisabled,
       hasOverride: !!ov,
       processed: processed.some((p) => p.paymentId === i.id && p.type === "INSTALLMENT"),
       isCredit,
@@ -1240,13 +1392,25 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   const transferBase = Math.max(0, rawRevenuesTotal - rawFixedTotal - totalEnvelopeLimits);
 
   const transfersSentWithProcessed = transfersSent.map((t) => {
-    const effectiveAmount = (t.isPercentage && t.percentage && t.percentage > 0)
+    const ov = overrides.find(
+      (o) => o.paymentId === t.id && o.type === "TRANSFER" && (targetM === 0 || o.month === targetM)
+    );
+    const isDisabled = ov ? (ov.isDisabled || ov.amount === 0) : false;
+    const overrideAmount = (ov && ov.amount !== null && ov.amount !== undefined && ov.amount > 0) ? ov.amount : t.amount;
+
+    const baseAmount = ((overrideAmount === 0 || overrideAmount === null) && t.isPercentage && t.percentage && t.percentage > 0)
       ? Math.round((t.percentage / 100) * transferBase * 100) / 100
-      : t.amount;
+      : overrideAmount;
+
+    const effectiveAmount = isDisabled ? 0 : baseAmount;
 
     return {
       ...t,
       amount: effectiveAmount,
+      originalAmount: t.amount,
+      overrideAmount,
+      isDisabled,
+      hasOverride: !!ov,
       calculatedBase: transferBase,
       processed: processed.some((p) => p.paymentId === t.id && p.type === "TRANSFER"),
     };
@@ -1255,7 +1419,7 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   const transfersReceivedWithProcessed = await Promise.all(
     transfersReceived.map(async (t) => {
       let effectiveAmount = t.amount;
-      if (t.isPercentage && t.percentage && t.percentage > 0) {
+      if ((effectiveAmount === 0 || effectiveAmount === null) && t.isPercentage && t.percentage && t.percentage > 0) {
         const [sRevenues, sRecurring, sInstallments, sEnvelopes, sOverrides] = await Promise.all([
           getRevenues(t.sourceWalletId, targetM, year),
           getRecurringExpenses(t.sourceWalletId, targetM, year),
@@ -1266,22 +1430,21 @@ export async function getDashboardData(walletId: string, month: number, year: nu
 
         const sRevTotal = sRevenues.reduce((acc, r) => {
           const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "REVENUE" && (targetM === 0 || o.month === targetM));
-          return acc + (ov ? ov.amount : r.amount);
+          return acc + getEffectiveOverrideAmount(r.amount, ov);
         }, 0);
 
         const sRecTotal = sRecurring.reduce((acc, r) => {
           const ov = sOverrides.find((o) => o.paymentId === r.id && o.type === "RECURRING" && (targetM === 0 || o.month === targetM));
-          return acc + (ov ? ov.amount : r.amount);
+          return acc + getEffectiveOverrideAmount(r.amount, ov);
         }, 0);
 
         const sInstTotal = sInstallments.reduce((acc, i) => {
           const ov = sOverrides.find((o) => o.paymentId === i.id && o.type === "INSTALLMENT" && (targetM === 0 || o.month === targetM));
-          return acc + (ov ? ov.amount : i.amount);
+          return acc + getEffectiveOverrideAmount(i.amount, ov);
         }, 0);
 
         const sEnvTotal = sEnvelopes.reduce((acc, e) => acc + (e.limitAmount > 0 ? e.limitAmount : 0), 0);
 
-        // La base pour le virement en % est calculée strictement sur les revenus bruts directs du portefeuille source (sans inclure d'autres virements)
         const sBase = Math.max(0, sRevTotal - (sRecTotal + sInstTotal) - sEnvTotal);
         effectiveAmount = Math.round((t.percentage / 100) * sBase * 100) / 100;
       }

@@ -140,15 +140,16 @@ model ProcessedPayment {
 }
 
 model ExpenseOverride {
-  id        String   @id @default(uuid())
-  walletId  String
-  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  paymentId String
-  type      String   // "REVENUE", "RECURRING"
-  amount    Float    // Montant spécifique pour ce mois
-  month     Int      // 1-12
-  year      Int
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  walletId   String
+  wallet     Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  paymentId  String
+  type       String   // "REVENUE", "RECURRING", "INSTALLMENT"
+  amount     Float?   // Montant spécifique pour ce mois (optionnel si uniquement désactivé)
+  isDisabled Boolean  @default(false)
+  month      Int      // 1-12
+  year       Int
+  createdAt  DateTime @default(now())
 
   @@unique([walletId, paymentId, type, month, year])
 }

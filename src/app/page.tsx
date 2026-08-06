@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -35,5 +36,9 @@ export default async function HomePage() {
   const wallets = await getUserWallets();
   const initialWalletId = (session.user as any).activeWalletId || (wallets[0] ? wallets[0].id : "");
 
-  return <DashboardClient initialWallets={wallets} initialWalletId={initialWalletId} user={session.user} />;
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", backgroundColor: "#0b0f19" }} />}>
+      <DashboardClient initialWallets={wallets} initialWalletId={initialWalletId} user={session.user} />
+    </Suspense>
+  );
 }

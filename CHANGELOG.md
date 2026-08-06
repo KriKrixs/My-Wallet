@@ -2,6 +2,36 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.2.0] - 2026-08-06
+
+### 📱 Interface Tactile & Expérience Mobile (UX/UI)
+* **Navigation Tactile sur Mobile** : Sur écran mobile (< 768px), appuyer sur n'importe quelle ligne d'un tableau ouvre désormais une **modale d'actions tactiles** avec de grands boutons adaptés au tactile.
+* **Isolation PC / Desktop** : Sur PC (≥ 768px), le clic sur les lignes est désactivé pour conserver l'interaction desktop standard via la colonne *Actions*.
+* **Colonnes Responsives Épurées** : Masquage des colonnes secondaires et d'actions sur mobile (`visibleFrom="md"`) afin d'éliminer le défilement horizontal et d'offrir une lisibilité maximale sur smartphone.
+
+### ↔️ Virements Inter-Portefeuilles
+* **Édition des Virements Émis** : Possibilité de modifier à tout moment un virement inter-portefeuille (motif, montant fixe ou pourcentage du solde dispo, portefeuille cible).
+* **Désactivation / Masquage Mensuel** : Ajout du bouton d'œil (👁️ / 🙈) permettant d'activer ou de désactiver un virement spécifiquement pour le mois en cours sans supprimer la règle globale.
+* **Suppression du Pointage Virement** : Retrait du système de pointage bancaire sur les virements inter-portefeuilles pour simplifier le flux.
+
+### 🛍️ Liste d'Achat (Wishlist & Simulateur)
+* **Modale d'Actions Mobiles Complète** : Accès rapide sur smartphone pour :
+  * 🛒 **Déclencher l'achat** (conversion en dépense réelle)
+  * ✏️ **Modifier le souhait**
+  * 🔗 **Ouvrir le lien marchand** *(bouton direct dans la modale mobile)*
+  * 🗑️ **Supprimer le souhait**
+* **Masquage de la Colonne Lien sur Mobile** : La colonne *Lien* disparaît sur mobile au profit du bouton d'ouverture dans la modale d'action.
+
+### 💳 Charges & Paiements Échelonnés (Crédits)
+* **Formatage Épuré des Crédits** : La période d'un prêt (`01/2026 ➔ 12/2026`) est désormais affichée en sous-titre élégant sous le libellé du crédit.
+* **Harmonisation des Tableaux** : Suppression de la colonne *Période* séparée sur PC et mobile, alignant à 100% le tableau des crédits avec celui des charges récurrentes.
+
+### 📂 Plafonds d'Enveloppes & Historisation
+* **Report & Modification M+1** : La modification du plafond d'une enveloppe sur un mois futur (M+1) s'applique désormais aux mois suivants sans altérer l'historique des mois passés.
+
+### 🌐 PWA & Mode Hors-Ligne
+* **Gestion Offline Simplifiée** : Affichage d'un message clair et épuré informant l'utilisateur de l'impossibilité d'accéder aux données en l'absence de connexion réseau.
+
 ---
 
 ## [v1.1.4] - 2026-07-29
