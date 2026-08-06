@@ -2,6 +2,22 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.2.1] - 2026-08-06
+
+### 💸 Historique des Dépenses & Tri Avancé
+* **Tri Interactif Multicritères** : Tri dynamique au clic sur les en-têtes de tableau (*Jour*, *Libellé*, *Catégorie*, *Montant*).
+* **Filtre par Catégorie Responsive** : Sélecteur déroulant placé à gauche de la recherche, s'affichant sur 2 lignes distinctes sur mobile pour une ergonomie optimale.
+* **Pied de Tableau Totalisant** : Calcul et affichage automatique du montant total des dépenses en bas de tableau.
+
+### 💳 Tableau des Crédits & Échéances
+* **Période en Sous-titre** : Intégration de la période du prêt (`01/2026 ➔ 12/2026`) sous le libellé du crédit.
+* **Suppression de la Colonne Période** : Retrait de la colonne séparée sur PC et mobile pour harmoniser le tableau avec celui des charges récurrentes.
+
+### 🛍️ Liste d'Achat (Wishlist)
+* **Masquage Responsive de la Colonne Lien** : Colonne *Lien* masquée sur mobile et accessible via le bouton d'action *Ouvrir le lien marchand* dans la modale tactile.
+
+---
+
 ## [v1.2.0] - 2026-08-06
 
 ### 📱 Interface Tactile & Expérience Mobile (UX/UI)
@@ -29,8 +45,10 @@ Toutes les modifications notables apportées au projet **MyWallet** seront consi
 ### 📂 Plafonds d'Enveloppes & Historisation
 * **Report & Modification M+1** : La modification du plafond d'une enveloppe sur un mois futur (M+1) s'applique désormais aux mois suivants sans altérer l'historique des mois passés.
 
-### 🌐 PWA & Mode Hors-Ligne
-* **Gestion Offline Simplifiée** : Affichage d'un message clair et épuré informant l'utilisateur de l'impossibilité d'accéder aux données en l'absence de connexion réseau.
+### 💸 Historique des Dépenses & Tri Avancé
+* **Tri Interactif Multicritères** : Tri dynamique au clic sur les en-têtes de tableau pour le *Jour*, le *Libellé*, la *Catégorie* et le *Montant* (croissant / décroissant).
+* **Filtre par Catégorie** : Menu déroulant permettant d'isoler en un clic les dépenses d'une catégorie spécifique.
+* **Pied de Tableau & Total Dynamique** : Calcul et affichage automatique de la somme totale des dépenses (mise à jour dynamique selon la recherche et le filtre).
 
 ---
 

@@ -840,6 +840,17 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
 
   const [searchTx, setSearchTx] = useState("");
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [txSortField, setTxSortField] = useState<"day" | "title" | "category" | "amount">("day");
+  const [txSortOrder, setTxSortOrder] = useState<"asc" | "desc">("desc");
+
+  const handleTxSort = (field: "day" | "title" | "category" | "amount") => {
+    if (txSortField === field) {
+      setTxSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setTxSortField(field);
+      setTxSortOrder("asc");
+    }
+  };
 
   const loadData = async () => {
     if (!activeWalletId) return;
@@ -1606,6 +1617,19 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     const matchesCategory = filterCategory ? t.category === filterCategory : true;
     return matchesSearch && matchesCategory;
   }) || [];
+
+  const sortedTransactions = useMemo(() => {
+    return [...filteredTransactions].sort((a: any, b: any) => {
+      let valA = a[txSortField];
+      let valB = b[txSortField];
+      if (typeof valA === "string") {
+        valA = valA.toLowerCase();
+        valB = (valB || "").toLowerCase();
+        return txSortOrder === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+      return txSortOrder === "asc" ? (valA || 0) - (valB || 0) : (valB || 0) - (valA || 0);
+    });
+  }, [filteredTransactions, txSortField, txSortOrder]);
 
   return (
     <Box style={{ minHeight: "100vh", backgroundColor: "#0b0e17", color: "#f1f3f5", paddingBottom: "60px" }}>
@@ -2951,17 +2975,31 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               </Group>
 
               {/* Filter & Search */}
-              <Group mb="md">
-                <TextInput
-                  placeholder="Rechercher par titre..."
-                  leftSection={<IconSearch size={16} />}
-                  value={searchTx}
-                  onChange={(e) => setSearchTx(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-              </Group>
+              <Grid mb="md" align="center">
+                <Grid.Col span={{ base: 12, sm: 4, md: 3 }}>
+                  <Select
+                    placeholder="Toutes les catégories"
+                    aria-label="Filtrer par catégorie"
+                    clearable
+                    value={filterCategory}
+                    onChange={(val) => setFilterCategory(val)}
+                    data={Array.from(new Set(data?.transactions?.map((t: any) => t.category) || [])).map((c: any) => ({
+                      label: c,
+                      value: c,
+                    }))}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 8, md: 9 }}>
+                  <TextInput
+                    placeholder="Rechercher par titre ou catégorie..."
+                    leftSection={<IconSearch size={16} />}
+                    value={searchTx}
+                    onChange={(e) => setSearchTx(e.target.value)}
+                  />
+                </Grid.Col>
+              </Grid>
 
-              {!filteredTransactions || filteredTransactions.length === 0 ? (
+              {!sortedTransactions || sortedTransactions.length === 0 ? (
                 <Text size="sm" c="dimmed" ta="center" py="xl">
                   Aucune dépense trouvée.
                 </Text>
@@ -2969,15 +3007,51 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                 <Table highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Jour</Table.Th>
-                      <Table.Th>Libellé</Table.Th>
-                      <Table.Th>Catégorie</Table.Th>
-                      <Table.Th>Montant</Table.Th>
+                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("day")}>
+                        <Group gap={4} wrap="nowrap">
+                          <span>Jour</span>
+                          {txSortField === "day" ? (
+                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                          ) : (
+                            <IconSelector size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </Group>
+                      </Table.Th>
+                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("title")}>
+                        <Group gap={4} wrap="nowrap">
+                          <span>Libellé</span>
+                          {txSortField === "title" ? (
+                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                          ) : (
+                            <IconSelector size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </Group>
+                      </Table.Th>
+                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("category")}>
+                        <Group gap={4} wrap="nowrap">
+                          <span>Catégorie</span>
+                          {txSortField === "category" ? (
+                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                          ) : (
+                            <IconSelector size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </Group>
+                      </Table.Th>
+                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("amount")}>
+                        <Group gap={4} wrap="nowrap">
+                          <span>Montant</span>
+                          {txSortField === "amount" ? (
+                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
+                          ) : (
+                            <IconSelector size={14} style={{ opacity: 0.3 }} />
+                          )}
+                        </Group>
+                      </Table.Th>
                       {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {filteredTransactions.map((t: any) => (
+                    {sortedTransactions.map((t: any) => (
                       <Table.Tr
                         key={t.id}
                         style={{ cursor: "pointer" }}
@@ -3006,6 +3080,26 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
+                  <Table.Tfoot>
+                    <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
+                      <Table.Td colSpan={3}>
+                        <Group justify="space-between" align="center">
+                          <Text size="sm" fw={700} c="white">
+                            Total des dépenses
+                          </Text>
+                          {filterCategory && (
+                            <Badge size="xs" color="cyan" variant="light">
+                              Filtre : {filterCategory}
+                            </Badge>
+                          )}
+                        </Group>
+                      </Table.Td>
+                      <Table.Td fw={800} c="red.4" style={{ fontSize: "15px" }}>
+                        -{filteredTransactions.reduce((acc: number, t: any) => acc + t.amount, 0).toFixed(2)} €
+                      </Table.Td>
+                      {!isReadOnly && <Table.Td visibleFrom="md" />}
+                    </Table.Tr>
+                  </Table.Tfoot>
                 </Table>
               )}
             </Paper>
