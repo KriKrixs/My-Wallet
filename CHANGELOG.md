@@ -2,6 +2,56 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.3.1] - 2026-08-10
+
+### 🎨 Garanties de Couleurs des Enveloppes Budgétaires sur les Camemberts
+* **Couleurs Exactes d'Enveloppes (`getCategoryChartColor`)** : Garantie à 100% que tous les camemberts par enveloppe (vue globale des enveloppes et ventilation des dépenses quotidiennes par enveloppe) utilisent la couleur exacte définie pour chaque enveloppe budgétaire.
+* **Palette Variée Exclusivité "Dépenses par Libellés"** : Le camembert des dépenses par libellé conserve une palette variée de couleurs distinctes par intitulé pour différencier facilement chaque poste de dépense.
+* **Matching Parfait Graphiques / Légendes / Barres** : Alignement strict à 100% des couleurs entre les tranches des camemberts SVG, les pastilles légendes du tableau et les barres de progression.
+
+## [v1.3.0] - 2026-08-10
+
+### 🏷️ Identité Visuelle & En-tête (Header)
+* **Badge de Version (`v1.3.0`)** : Remplacement du badge *(PWA)* à côté du logo **MyWallet** dans l'en-tête principal par un badge affichant la version officielle actuelle (`v1.3.0`).
+
+### 📊 Refonte Complète du Module Statistiques (2 Modes)
+* **Correction des Couleurs SVG (`MANTINE_COLOR_MAP` & Hex)** : Résolution de l'affichage noir des camemberts grâce au mapping automatique des thèmes Mantine vers des codes hexadécimaux SVG valides (`#20c997`, `#22b8cf`, `#7950f2`, etc.).
+* **Sélecteur de Mode Interactif (`SegmentedControl`)** : Intégration d'un sélecteur fluide permettant de basculer instantanément entre la vue des **Enveloppes Overall** et l'**Analyse des Dépenses Quotidiennes**.
+* **Mode 1 — Enveloppes Budget (Vue Globale)** : Camembert interactif de la consommation globale de chaque enveloppe budgétaire (charges fixes, crédits et dépenses quotidiennes incluses) avec tableau de détail et barres de progression.
+* **Mode 2 — Dépenses Quotidiennes (2 Camemberts Empilés)** :
+  1. **Premier Camembert** : Ventilation des dépenses quotidiennes regroupées **par intitutés / libellés de dépenses** avec palette dédiée et tableau récapitulatif.
+  2. **Deuxième Camembert (suivi juste en dessous)** : Ventilation des dépenses quotidiennes regroupées **uniquement par enveloppes / catégories** d'enveloppes de dépenses.
+
+### 🖥️ Layout Optimal des Colonnes (Tous les Tableaux)
+* **Tableau Liste d'Achat (Wishlist)** : Réorganisation complète de l'ordre des colonnes : **Priorité** ➜ **Catégorie** ➜ **Libellé** (`width: 100%`) ➜ **Lien** ➜ **Montant Estimé** ➜ **Actions** (en-tête renommé en *Actions*).
+* **Ordre des Colonnes du Tableau Dépenses** : **Catégorie** (1ère colonne tout à gauche) ➜ **Libellé** (`width: 100%`) ➜ **Jour** ➜ **Montant** ➜ **Actions**.
+* **Repositionnement à Gauche (`Type` & `Catégorie`)** : Placements des badges *Type* (*Fixe* / *Variable*) et *Catégorie* en **toute première colonne tout à gauche** dans les tableaux des Revenus du Mois, Charges Récurrentes et Crédits.
+* **Colonnes Libellés Extensibles (`width: 100%`)** : La colonne *Libellé* s'étend pour occuper l'intégralité de l'espace horizontal disponible dans l'ensemble des tableaux de l'application.
+* **Largeur Minimale Intégrale des Badges (`maxWidth: none`)** : Les colonnes *Type* et *Catégorie* s'adaptent désormais à la **largeur exacte du libellé le plus long de la colonne**, éliminant tout tronquage avec `...` sur les badges.
+* **Colonnes Secondaires Compactes (`whiteSpace: nowrap`)** : Les colonnes *Jour*, *Montant* et *Actions* restent calées à leur largeur minimale idéale sans rupture de ligne.
+
+### 🎨 Palette de Couleurs Élargie pour les Catégories & Enveloppes
+* **27 Couleurs Distinctes & Expressives** : Ajout d'une vaste palette de 27 teintes (Vert d'eau, Cyan, Indigo, Raisin, Violet, Magenta, Framboise, Pourpre, Améthyste, Bleu Cobalt, Bleu Ciel, Émeraude, Menthe, Olive, Miel, Mandarine, Corail, etc.) avec icônes indicatrices dans le sélecteur.
+* **Attribution & Rendu Sécurisés** : Prise en compte dynamique des couleurs hexadécimales et thématiques dans l'ensemble des badges, textes et graphiques récapitulatifs.
+
+### 📱 Protection contre le Débordement sur Mobile
+* **Conteneur de Défilement Interne (`Table.ScrollContainer`)** : Encapsulation de tous les tableaux (Dépenses, Liste d'Achat, Charges Récurrentes, Crédits et Revenus) dans un conteneur responsive.
+* **Élimination du Débordement Général** : Empêche strictement le tableau de faire déborder la largeur de la page sur mobile, le défilement se faisant uniquement à l'intérieur de sa carte.
+
+### 💸 Historique des Dépenses & Notes
+* **Affichage des Notes en Sous-titre** : Les remarques/notes saisies sur une dépense s'affichent sous son libellé en texte gris discret (`c="dimmed"`).
+* **Tronquage Responsive avec Ellipse (...)** : Gestion fluide pour éviter d'élargir la colonne *Libellé*, notamment sur écran mobile.
+
+### 🗓️ Synchronisation des Modales de Création
+* **Alignement Automatique du Mois & Année** : Les modales de création (Revenus, Remboursements, Charges Récurrentes, Crédits / Échéances, Enveloppes Budgétaires, Dépenses et Conversion de la Liste d'Achat) pré-remplissent désormais automatiquement le **mois et l'année actuellement consultés** dans le tableau de bord.
+
+### 🛍️ Liste d'Achat & Filtres Avancés
+* **Recherche par Libellé / Description** : Ajout d'un champ de recherche par texte permettant de filtrer instantanément les souhaits d'achat par libellé ou notes.
+* **Filtre par Catégorie Dédié (Wishlist Uniquement)** : Remplacement du menu d'ordre par un sélecteur de catégorie proposant **uniquement les catégories présentes dans la Liste d'Achat**.
+* **Autocomplétion des Catégories** : Prise en compte de toutes les catégories de la Liste d'Achat dans les sélecteurs de catégories de l'application (`CategorySelect`).
+
+---
+
 ## [v1.2.1] - 2026-08-06
 
 ### 💸 Historique des Dépenses & Tri Avancé

@@ -1530,11 +1530,12 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   // Reste à vivre réel = Revenus pointés - Dépenses courantes - Charges pointées - Déficit mois précédent + Bonus mois précédent
   const realRestToLive = pointedRevenues - totalTransactions - pointedFixedExpenses - previousMonthDeficit + previousMonthSurplus;
 
-  const [allWalletRecurring, allWalletTransactions, allWalletEnvelopes, allWalletInstallments] = await Promise.all([
+  const [allWalletRecurring, allWalletTransactions, allWalletEnvelopes, allWalletInstallments, allWalletWishlist] = await Promise.all([
     db.recurringExpense.findMany({ where: { walletId }, select: { category: true } }),
     db.transaction.findMany({ where: { walletId }, select: { category: true } }),
     db.budgetEnvelope.findMany({ where: { walletId }, select: { category: true, color: true } }),
     db.installmentPayment.findMany({ where: { walletId }, select: { category: true } }),
+    db.wishlistItem.findMany({ where: { walletId }, select: { category: true } }),
   ]);
 
   const categorySet = new Set<string>();
@@ -1542,6 +1543,7 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   allWalletTransactions.forEach((t) => t.category && categorySet.add(t.category.trim()));
   allWalletEnvelopes.forEach((e) => e.category && categorySet.add(e.category.trim()));
   allWalletInstallments.forEach((i) => i.category && categorySet.add(i.category.trim()));
+  allWalletWishlist.forEach((w) => w.category && categorySet.add(w.category.trim()));
 
   const EXCLUDED_SYSTEM_CATEGORIES = [
     "crédit",
@@ -1561,7 +1563,12 @@ export async function getDashboardData(walletId: string, month: number, year: nu
 
   const envelopeCategoriesList = categories;
 
-  const PRESET_COLORS_LIST = ["teal", "blue", "violet", "pink", "orange", "green", "red", "gray"];
+  const PRESET_COLORS_LIST = [
+    "teal", "blue", "violet", "indigo", "grape", "pink", "red", "orange",
+    "yellow", "lime", "green", "cyan", "gray", "#e64980", "#d63384",
+    "#be4bdb", "#7950f2", "#4c6ef5", "#339af0", "#12b886", "#20c997",
+    "#51cf66", "#82c91e", "#fab005", "#e8590c", "#ff6b6b", "#f783ac"
+  ];
 
   // Calcul enveloppes pour les catégories éligibles (hors crédits & paiements échelonnés)
   const envelopeStats = envelopeCategoriesList.map((catName, idx) => {

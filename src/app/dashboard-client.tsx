@@ -177,14 +177,33 @@ const parseAmount = (val: number | string | null | undefined): number => {
 };
 
 const PRESET_COLORS = [
-  { label: "Blanc", value: "white" },
-  { label: "Teal", value: "teal" },
-  { label: "Bleu", value: "blue" },
-  { label: "Violet", value: "violet" },
-  { label: "Rose", value: "pink" },
-  { label: "Orange", value: "orange" },
-  { label: "Vert", value: "green" },
-  { label: "Rouge", value: "red" },
+  { label: "⚪ Blanc", value: "white" },
+  { label: "🟢 Vert d'eau (Teal)", value: "teal" },
+  { label: "🔵 Bleu", value: "blue" },
+  { label: "🟣 Violet", value: "violet" },
+  { label: "🔮 Indigo", value: "indigo" },
+  { label: "🍇 Raisin (Grape)", value: "grape" },
+  { label: "🌸 Rose (Pink)", value: "pink" },
+  { label: "🔴 Rouge", value: "red" },
+  { label: "🟠 Orange", value: "orange" },
+  { label: "🟡 Jaune", value: "yellow" },
+  { label: "🍏 Vert Citron (Lime)", value: "lime" },
+  { label: "🌿 Vert", value: "green" },
+  { label: "💎 Cyan / Turquoise", value: "cyan" },
+  { label: "🩶 Gris", value: "gray" },
+  { label: "🌺 Framboise", value: "#e64980" },
+  { label: "🌷 Magenta", value: "#d63384" },
+  { label: "🪻 Améthyste", value: "#be4bdb" },
+  { label: "🎆 Pourpre", value: "#7950f2" },
+  { label: "🌐 Bleu Cobalt", value: "#4c6ef5" },
+  { label: "🧊 Bleu Ciel", value: "#339af0" },
+  { label: "🌊 Turquoise Profond", value: "#12b886" },
+  { label: "☘️ Vert Émeraude", value: "#20c997" },
+  { label: "🍃 Vert Menthe", value: "#51cf66" },
+  { label: "🌾 Vert Olive", value: "#82c91e" },
+  { label: "🍯 Miel / Ambre", value: "#fab005" },
+  { label: "🍊 Mandarine", value: "#e8590c" },
+  { label: "🪸 Corail", value: "#ff6b6b" },
 ];
 
 function CategorySelect({
@@ -429,15 +448,51 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
 
   const getCategoryColor = (category?: string) => {
     if (!category) return "white";
-    const env = data?.envelopes?.find((e: any) => e.category.toLowerCase() === category.toLowerCase());
+    const target = category.trim().toLowerCase();
+    const env = data?.envelopes?.find((e: any) => e.category.trim().toLowerCase() === target);
     const col = env?.color || "white";
     return col === "gray" ? "white" : col;
   };
 
   const getCategoryTextColor = (category?: string) => {
     const col = getCategoryColor(category);
-    if (col === "white" || col === "gray") return "white";
+    if (!col || col === "white" || col === "gray") return "white";
+    if (col.startsWith("#")) return col;
     return `${col}.4`;
+  };
+
+  const MANTINE_COLOR_MAP: Record<string, string> = {
+    teal: "#20c997",
+    cyan: "#22b8cf",
+    blue: "#339af0",
+    indigo: "#4c6ef5",
+    violet: "#7950f2",
+    grape: "#be4bdb",
+    pink: "#e64980",
+    red: "#fa5252",
+    orange: "#fd7e14",
+    yellow: "#fab005",
+    lime: "#82c91e",
+    green: "#40c057",
+    gray: "#adb5bd",
+    white: "#f8f9fa",
+  };
+
+  const getCategoryChartColor = (category?: string, idx: number = 0) => {
+    const col = getCategoryColor(category);
+    const PRESET_COLORS = [
+      "#20c997", "#339af0", "#7950f2", "#f783ac", "#fd7e14",
+      "#40c057", "#fa5252", "#12b886", "#fab005", "#15aabf",
+      "#be4bdb", "#e64980", "#82c91e", "#4dabf7", "#e8590c",
+      "#d63384", "#4c6ef5", "#51cf66", "#ff6b6b", "#cc5de8",
+      "#22b8cf", "#94d82d", "#fcc419", "#ff922b", "#a9e34b",
+      "#74c0fc", "#66d9e8"
+    ];
+    if (!col || col === "white") {
+      return PRESET_COLORS[idx % PRESET_COLORS.length];
+    }
+    if (col.startsWith("#")) return col;
+    return MANTINE_COLOR_MAP[col] || PRESET_COLORS[idx % PRESET_COLORS.length];
   };
 
   const renderCategoryBadge = (category?: string) => {
@@ -448,7 +503,20 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
         color={col}
         variant="filled"
         size="sm"
-        style={isWhite ? { color: "#000", fontWeight: 700 } : undefined}
+        fullWidth={false}
+        styles={{
+          label: {
+            overflow: "visible",
+            textOverflow: "clip",
+            whiteSpace: "nowrap",
+          },
+        }}
+        style={{
+          width: "max-content",
+          maxWidth: "none",
+          whiteSpace: "nowrap",
+          ...(isWhite ? { color: "#000", fontWeight: 700 } : {}),
+        }}
       >
         {category || "Général"}
       </Badge>
@@ -492,6 +560,8 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const [showPurchasedWishlist, setShowPurchasedWishlist] = useState(false);
   const [selectedWishlistIds, setSelectedWishlistIds] = useState<string[]>([]);
   const [safetyMarginPercent, setSafetyMarginPercent] = useState<number | string>(0);
+  const [searchWishlist, setSearchWishlist] = useState("");
+  const [filterWishlistCategory, setFilterWishlistCategory] = useState<string | null>(null);
   const [wishlistSortField, setWishlistSortField] = useState<"priority" | "title" | "amount" | "category">("priority");
   const [wishlistSortOrder, setWishlistSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -503,6 +573,9 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
       setWishlistSortOrder(field === "priority" || field === "amount" ? "desc" : "asc");
     }
   };
+
+  // Statistics Mode State
+  const [statsMode, setStatsMode] = useState<string>("envelopes");
 
   // Form Errors State
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -564,97 +637,89 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const rawFixedTotal = data?.summary?.fixedExpenses || 0;
   const previewTransferBase = Math.max(0, rawRevenuesTotal - rawFixedTotal - envLimitsSum);
 
-  const statsData = useMemo(() => {
-    if (!data) return { items: [], totalRevenues: 0, totalExpenses: 0, unspent: 0 };
+  // STATS 1: Enveloppes Overall
+  const overallEnvelopesStats = useMemo(() => {
+    if (!data || !data.envelopes) return { items: [], totalSpent: 0 };
+    const items = data.envelopes
+      .filter((e: any) => e.spent > 0)
+      .map((e: any, idx: number) => ({
+        name: e.category,
+        value: Math.round(e.spent * 100) / 100,
+        color: getCategoryChartColor(e.category, idx),
+        limitAmount: e.limitAmount,
+        hasLimit: e.hasLimit,
+      }))
+      .sort((a: any, b: any) => b.value - a.value);
 
-    const totalRevenues = data.summary?.totalRevenues || 0;
-    const rawItems: { name: string; value: number; type: string }[] = [];
+    const totalSpent = items.reduce((acc: number, item: any) => acc + item.value, 0);
+    return { items, totalSpent };
+  }, [data]);
 
-    // 1. Charges Fixes, Crédits & Échéances : regroupés par CATÉGORIE
-    const fixedCategoryMap: { [cat: string]: number } = {};
-
-    if (data.recurring) {
-      data.recurring.forEach((r: any) => {
-        if (r.amount > 0) {
-          const cat = (r.category || "Charges").trim();
-          fixedCategoryMap[cat] = (fixedCategoryMap[cat] || 0) + r.amount;
+  // STATS 2A: Dépenses Quotidiennes par Libellés
+  const dailyExpensesByTitleStats = useMemo(() => {
+    if (!data || !data.transactions) return { items: [], total: 0 };
+    const grouped: { [title: string]: { amount: number; category: string } } = {};
+    data.transactions.forEach((t: any) => {
+      if (t.amount > 0) {
+        const title = (t.title || "Dépense").trim();
+        if (!grouped[title]) {
+          grouped[title] = { amount: 0, category: t.category };
         }
-      });
-    }
-
-    if (data.installments) {
-      data.installments.forEach((i: any) => {
-        if (i.amount > 0) {
-          const cat = (i.category || "Crédits & Échéances").trim();
-          fixedCategoryMap[cat] = (fixedCategoryMap[cat] || 0) + i.amount;
-        }
-      });
-    }
-
-    if (data.transfersSent) {
-      data.transfersSent.forEach((t: any) => {
-        if (t.amount > 0) {
-          const cat = "Virements émis";
-          fixedCategoryMap[cat] = (fixedCategoryMap[cat] || 0) + t.amount;
-        }
-      });
-    }
-
-    Object.entries(fixedCategoryMap).forEach(([catName, sumAmount]) => {
-      if (sumAmount > 0) {
-        rawItems.push({
-          name: catName,
-          value: Math.round(sumAmount * 100) / 100,
-          type: "Charge / Crédit (Catégorie)",
-        });
+        grouped[title].amount += t.amount;
       }
     });
 
-    // 2. Dépenses Quotidiennes : regroupées uniquement par LIBELLÉ en minuscules
-    if (data.transactions) {
-      const groupedTrx: { [label: string]: number } = {};
-      data.transactions.forEach((t: any) => {
-        if (t.amount > 0) {
-          const lowerLabel = (t.title || "dépense").trim().toLowerCase();
-          groupedTrx[lowerLabel] = (groupedTrx[lowerLabel] || 0) + t.amount;
-        }
-      });
-
-      Object.entries(groupedTrx).forEach(([label, amount]) => {
-        if (amount > 0) {
-          rawItems.push({
-            name: label,
-            value: Math.round(amount * 100) / 100,
-            type: "Dépense quotidienne",
-          });
-        }
-      });
-    }
-
-    // 3. TRI du plus grand au plus petit (pourcentage / montant)
-    rawItems.sort((a, b) => b.value - a.value);
-
-    // 4. Attribution des couleurs après tri
     const PRESET_COLORS = [
       "#20c997", "#339af0", "#7950f2", "#f783ac", "#fd7e14",
       "#40c057", "#fa5252", "#12b886", "#fab005", "#15aabf",
-      "#be4bdb", "#e64980", "#82c91e", "#4dabf7", "#e8590c"
+      "#be4bdb", "#e64980", "#82c91e", "#4dabf7", "#e8590c",
+      "#d63384", "#4c6ef5", "#51cf66", "#ff6b6b", "#cc5de8",
+      "#22b8cf", "#94d82d", "#fcc419", "#ff922b", "#a9e34b",
+      "#74c0fc", "#66d9e8"
     ];
 
-    const items = rawItems.map((item, idx) => ({
-      ...item,
-      color: PRESET_COLORS[idx % PRESET_COLORS.length],
-    }));
+    const items = Object.entries(grouped)
+      .map(([name, obj], idx) => ({
+        name,
+        value: Math.round(obj.amount * 100) / 100,
+        category: obj.category,
+        color: PRESET_COLORS[idx % PRESET_COLORS.length],
+      }))
+      .sort((a, b) => b.value - a.value);
 
-    const totalExpenses = items.reduce((acc, item) => acc + item.value, 0);
+    const total = items.reduce((acc, item) => acc + item.value, 0);
+    return { items, total };
+  }, [data]);
+
+  // STATS 2B: Dépenses Quotidiennes par Enveloppes / Catégories
+  const dailyExpensesByCategoryStats = useMemo(() => {
+    if (!data || !data.transactions) return { items: [], total: 0 };
+    const grouped: { [cat: string]: number } = {};
+    data.transactions.forEach((t: any) => {
+      if (t.amount > 0) {
+        const cat = (t.category || "Général").trim();
+        grouped[cat] = (grouped[cat] || 0) + t.amount;
+      }
+    });
+
+    const items = Object.entries(grouped)
+      .map(([cat, amount], idx) => ({
+        name: cat,
+        value: Math.round(amount * 100) / 100,
+        color: getCategoryChartColor(cat, idx),
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    const total = items.reduce((acc, item) => acc + item.value, 0);
+    return { items, total };
+  }, [data]);
+
+  // STATS Summary Header KPIs
+  const statsSummary = useMemo(() => {
+    const totalRevenues = data?.summary?.totalRevenues || 0;
+    const totalExpenses = (data?.summary?.fixedExpenses || 0) + (data?.summary?.totalTransactions || 0);
     const unspent = Math.max(0, totalRevenues - totalExpenses);
-
-    return {
-      items,
-      totalRevenues,
-      totalExpenses,
-      unspent,
-    };
+    return { totalRevenues, totalExpenses, unspent };
   }, [data]);
 
   const wishlistCalc = useMemo(() => {
@@ -694,9 +759,26 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     };
   }, [data?.wishlistItems, data?.summary?.netSavings, selectedWishlistIds, safetyMarginPercent]);
 
-  const sortedWishlistItems = useMemo(() => {
+  const wishlistCategoryOptions = useMemo(() => {
+    const cats = Array.from(
+      new Set(data?.wishlistItems?.map((w: any) => w.category?.trim()).filter(Boolean) || [])
+    ).sort((a: any, b: any) => a.localeCompare(b));
+    return cats.map((c: any) => ({ label: c, value: c }));
+  }, [data?.wishlistItems]);
+
+  const filteredWishlistItems = useMemo(() => {
     if (!data?.wishlistItems) return [];
-    const items = [...data.wishlistItems];
+    return data.wishlistItems.filter((item: any) => {
+      const matchesSearch = searchWishlist.trim() === "" ||
+        item.title.toLowerCase().includes(searchWishlist.toLowerCase()) ||
+        (item.notes && item.notes.toLowerCase().includes(searchWishlist.toLowerCase()));
+      const matchesCategory = filterWishlistCategory ? item.category === filterWishlistCategory : true;
+      return matchesSearch && matchesCategory;
+    });
+  }, [data?.wishlistItems, searchWishlist, filterWishlistCategory]);
+
+  const sortedWishlistItems = useMemo(() => {
+    const items = [...filteredWishlistItems];
 
     const priorityWeights: Record<string, number> = {
       URGENT: 5,
@@ -726,7 +808,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
       bVal = Number(bVal) || 0;
       return wishlistSortOrder === "asc" ? aVal - bVal : bVal - aVal;
     });
-  }, [data?.wishlistItems, wishlistSortField, wishlistSortOrder]);
+  }, [filteredWishlistItems, wishlistSortField, wishlistSortOrder]);
   const previewTransferAmount = Math.round(((Number(transferPercentage) || 0) / 100) * previewTransferBase * 100) / 100;
   const [editTarget, setEditTarget] = useState<{
     id: string;
@@ -809,6 +891,81 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const [inviteRole, setInviteRole] = useState<PermissionLevel>("FULL_ACCESS");
 
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const targetM = month === 0 ? new Date().getMonth() + 1 : month;
+    setRevMonth(targetM);
+    setRevYear(year);
+    setRecStartMonth(targetM);
+    setRecStartYear(year);
+    setInstStartMonth(targetM);
+    setInstStartYear(year);
+    let endM = targetM + 3;
+    let endY = year;
+    if (endM > 12) {
+      endM = endM - 12;
+      endY = year + 1;
+    }
+    setInstEndMonth(endM);
+    setInstEndYear(endY);
+    setEnvMonth(targetM);
+    setEnvYear(year);
+    setTrxMonth(targetM);
+    setTrxYear(year);
+  }, [month, year]);
+
+  const handleOpenAddRevenue = (type: "REVENUE" | "REIMBURSEMENT" = "REVENUE") => {
+    setFormErrors({});
+    setRevTitle("");
+    setRevAmount(1000);
+    setEntryCategory(type);
+    setEntryFrequency("FIXED");
+    setRevMonth(month === 0 ? new Date().getMonth() + 1 : month);
+    setRevYear(year);
+    setRevenueModal(true);
+  };
+
+  const handleOpenAddRecurring = () => {
+    setFormErrors({});
+    setRecTitle("");
+    setRecAmount(50);
+    setRecCategory("Logement");
+    setRecDay(5);
+    setRecStartMonth(month === 0 ? new Date().getMonth() + 1 : month);
+    setRecStartYear(year);
+    setRecurringModal(true);
+  };
+
+  const handleOpenAddInstallment = () => {
+    setFormErrors({});
+    const targetM = month === 0 ? new Date().getMonth() + 1 : month;
+    setInstTitle("");
+    setInstAmount(50);
+    setInstTotal(500);
+    setInstCategory("Paiement échelonné");
+    setInstDay(10);
+    setInstStartMonth(targetM);
+    setInstStartYear(year);
+    let endM = targetM + 3;
+    let endY = year;
+    if (endM > 12) {
+      endM = endM - 12;
+      endY = year + 1;
+    }
+    setInstEndMonth(endM);
+    setInstEndYear(endY);
+    setInstallmentModal(true);
+  };
+
+  const handleOpenAddEnvelope = () => {
+    setFormErrors({});
+    setEnvCategory("");
+    setEnvLimit("");
+    setEnvColor("teal");
+    setEnvMonth(month === 0 ? new Date().getMonth() + 1 : month);
+    setEnvYear(year);
+    setEnvelopeModal(true);
+  };
 
   const handleOpenAddTransaction = () => {
     setFormErrors({});
@@ -1200,25 +1357,24 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   };
 
   const handleOpenConvertWishlist = (item: any) => {
-    const today = new Date();
-    const todayDay = today.getDate();
-    const todayMonth = today.getMonth() + 1;
-    const todayYear = today.getFullYear();
+    const todayDay = new Date().getDate();
+    const targetM = month === 0 ? new Date().getMonth() + 1 : month;
+    const targetY = year;
 
     setConvertingItem(item);
     setConvertTargetWalletId(activeWalletId);
     setConvertAmount(item.amount);
     setConvertMode("SINGLE");
     setConvertDay(todayDay);
-    setConvertMonth(todayMonth);
-    setConvertYear(todayYear);
+    setConvertMonth(targetM);
+    setConvertYear(targetY);
 
     setConvertTotalMonths(4);
     setConvertInstallmentAmount((item.amount / 4).toFixed(2));
-    setConvertStartMonth(todayMonth);
-    setConvertStartYear(todayYear);
-    setConvertEndMonth(todayMonth);
-    setConvertEndYear(todayYear + 1);
+    setConvertStartMonth(targetM);
+    setConvertStartYear(targetY);
+    setConvertEndMonth(targetM);
+    setConvertEndYear(targetY + 1);
     setConvertDayOfMonth(todayDay);
 
     setFormErrors({});
@@ -1648,7 +1804,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                     MyWallet
                   </Title>
                   <Badge variant="outline" color="teal" size="sm">
-                    PWA
+                    v1.3.1
                   </Badge>
                 </Group>
                 <Text size="xs" c="dimmed">
@@ -1896,11 +2052,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                         variant="light"
                         color="teal"
                         leftSection={<IconPlus size={14} />}
-                        onClick={() => {
-                          setEnvMonth(month === 0 ? new Date().getMonth() + 1 : month);
-                          setEnvYear(year);
-                          setEnvelopeModal(true);
-                        }}
+                        onClick={handleOpenAddEnvelope}
                       >
                         Ajouter une enveloppe
                       </Button>
@@ -2316,7 +2468,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                                 Jour {t.day} • {t.category}
                               </Text>
                             </div>
-                            <Text size="sm" fw={700} c={`${getCategoryColor(t.category)}.4`}>
+                            <Text size="sm" fw={700} c={getCategoryTextColor(t.category)}>
                               -{t.amount.toFixed(2)} €
                             </Text>
                           </Group>
@@ -2487,7 +2639,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                               <Text size="sm" fw={600}>
                                 {i.title} (Jour {i.dayOfMonth})
                               </Text>
-                              <Text size="xs" c={`${getCategoryColor(i.category)}.4`} fw={700}>
+                              <Text size="xs" c={getCategoryTextColor(i.category)} fw={700}>
                                 -{i.amount.toFixed(2)} €
                               </Text>
                             </div>
@@ -2507,8 +2659,6 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
             </Paper>
           </Tabs.Panel>
 
-
-
           {/* TAB 4: REVENUS ET CHARGES FIXES */}
           <Tabs.Panel value="fixed">
             <Stack gap="lg">
@@ -2516,199 +2666,203 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               <Grid>
                 {/* Colonne Revenus du Mois */}
                 <Grid.Col span={{ base: 12, md: 6 }}>
-                  <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <Paper p={{ base: "xs", sm: "md", md: "lg" }} radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                     <Group justify="space-between" mb="md">
                       <Title order={4} style={{ color: "#fff" }}>
                         Revenus du Mois
                       </Title>
                       {!isReadOnly && (
-                        <Button size="xs" color="teal" leftSection={<IconPlus size={14} />} onClick={() => {
-                          setEntryCategory("REVENUE");
-                          setEntryFrequency("FIXED");
-                          setRevMonth(month === 0 ? new Date().getMonth() + 1 : month);
-                          setRevYear(year);
-                          setRevenueModal(true);
-                        }}>
+                        <Button size="xs" color="teal" leftSection={<IconPlus size={14} />} onClick={() => handleOpenAddRevenue("REVENUE")}>
                           Ajouter un Revenu
                         </Button>
                       )}
                     </Group>
-                    <Table highlightOnHover>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Libellé</Table.Th>
-                          <Table.Th>Type</Table.Th>
-                          <Table.Th>Montant</Table.Th>
-                          {!isReadOnly && <Table.Th visibleFrom="md">Action</Table.Th>}
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {data?.revenues?.map((r: any) => {
-                          const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
-                          return (
-                            <Table.Tr
-                              key={r.id}
-                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
-                              onClick={() => handleRowClick(r, "REVENUE")}
-                            >
-                              <Table.Td fw={600}>
-                                <Text size="sm" fw={600}>{r.title}</Text>
-                              </Table.Td>
-                              <Table.Td>
-                                <Badge color={r.type === "FIXED" ? "teal" : "blue"} variant="light">
-                                  {r.type === "FIXED" ? "Fixe" : "Variable"}
-                                </Badge>
-                              </Table.Td>
-                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : "teal.4"}>
-                                +{r.amount.toFixed(2)} €
-                              </Table.Td>
-                              {!isReadOnly && (
-                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
-                                  <Group gap={4}>
-                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                      <ActionIcon
-                                        color={isItemDisabled ? "teal" : "gray"}
-                                        variant={isItemDisabled ? "light" : "subtle"}
-                                        onClick={() => handleToggleDisableItem(r, "REVENUE")}
-                                      >
-                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <Tooltip label="Ajuster ou modifier">
-                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                        id: r.id,
-                                        title: r.title,
-                                        type: "REVENUE",
-                                        subType: r.type,
-                                        currentAmount: r.amount,
-                                        originalAmount: r.originalAmount,
-                                        overrideAmount: r.overrideAmount,
-                                        isDisabled: r.isDisabled,
-                                        hasOverride: r.hasOverride,
-                                      })}>
-                                        <IconEdit size={16} />
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
-                                      <IconTrash size={16} />
-                                    </ActionIcon>
-                                  </Group>
+                    <Table.ScrollContainer minWidth={300}>
+                      <Table highlightOnHover style={{ tableLayout: "auto", width: "100%" }}>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Type</Table.Th>
+                            <Table.Th style={{ width: "100%" }}>Libellé</Table.Th>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Montant</Table.Th>
+                            {!isReadOnly && <Table.Th visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }}>Action</Table.Th>}
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {data?.revenues?.map((r: any) => {
+                            const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
+                            return (
+                              <Table.Tr
+                                key={r.id}
+                                style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                                onClick={() => handleRowClick(r, "REVENUE")}
+                              >
+                                <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  <Badge
+                                    color={r.type === "FIXED" ? "teal" : "blue"}
+                                    variant="light"
+                                    fullWidth={false}
+                                    styles={{
+                                      label: {
+                                        overflow: "visible",
+                                        textOverflow: "clip",
+                                        whiteSpace: "nowrap",
+                                      },
+                                    }}
+                                    style={{ width: "max-content", maxWidth: "none", whiteSpace: "nowrap" }}
+                                  >
+                                    {r.type === "FIXED" ? "Fixe" : "Variable"}
+                                  </Badge>
                                 </Table.Td>
-                              )}
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                      <Table.Tfoot>
-                        <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
-                          <Table.Td colSpan={2}>
-                            <Text size="sm" fw={400} c="white">
-                              Total
-                            </Text>
-                          </Table.Td>
-                          <Table.Td fw={400} c="white">
-                            +{data?.summary?.totalStandardRevenues ? data.summary.totalStandardRevenues.toFixed(2) : "0.00"} €
-                          </Table.Td>
-                          {!isReadOnly && <Table.Td visibleFrom="md" />}
-                        </Table.Tr>
-                      </Table.Tfoot>
-                    </Table>
+                                <Table.Td fw={600} style={{ width: "100%" }}>
+                                  <Text size="sm" fw={600}>{r.title}</Text>
+                                </Table.Td>
+                                <Table.Td fw={700} c={isItemDisabled ? "dimmed" : "teal.4"} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  +{r.amount.toFixed(2)} €
+                                </Table.Td>
+                                {!isReadOnly && (
+                                  <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                                    <Group gap={4} wrap="nowrap">
+                                      <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                        <ActionIcon
+                                          color={isItemDisabled ? "teal" : "gray"}
+                                          variant={isItemDisabled ? "light" : "subtle"}
+                                          onClick={() => handleToggleDisableItem(r, "REVENUE")}
+                                        >
+                                          {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <Tooltip label="Ajuster ou modifier">
+                                        <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                          id: r.id,
+                                          title: r.title,
+                                          type: "REVENUE",
+                                          subType: r.type,
+                                          currentAmount: r.amount,
+                                          originalAmount: r.originalAmount,
+                                          overrideAmount: r.overrideAmount,
+                                          isDisabled: r.isDisabled,
+                                          hasOverride: r.hasOverride,
+                                        })}>
+                                          <IconEdit size={16} />
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
+                                        <IconTrash size={16} />
+                                      </ActionIcon>
+                                    </Group>
+                                  </Table.Td>
+                                )}
+                              </Table.Tr>
+                            );
+                          })}
+                        </Table.Tbody>
+                        <Table.Tfoot>
+                          <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
+                            <Table.Td colSpan={2} style={{ width: "100%" }}>
+                              <Text size="sm" fw={400} c="white">
+                                Total
+                              </Text>
+                            </Table.Td>
+                            <Table.Td fw={400} c="white" style={{ width: 1, whiteSpace: "nowrap" }}>
+                              +{data?.summary?.totalStandardRevenues ? data.summary.totalStandardRevenues.toFixed(2) : "0.00"} €
+                            </Table.Td>
+                            {!isReadOnly && <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} />}
+                          </Table.Tr>
+                        </Table.Tfoot>
+                      </Table>
+                    </Table.ScrollContainer>
                   </Paper>
                 </Grid.Col>
 
                 {/* Colonne Remboursements en ma faveur */}
                 <Grid.Col span={{ base: 12, md: 6 }}>
-                  <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <Paper p={{ base: "xs", sm: "md", md: "lg" }} radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                     <Group justify="space-between" mb="md">
                       <Title order={4} style={{ color: "#fff" }}>
                         Remboursements en ma faveur
                       </Title>
                       {!isReadOnly && (
-                        <Button size="xs" color="teal" leftSection={<IconPlus size={14} />} onClick={() => {
-                          setEntryCategory("REIMBURSEMENT");
-                          setEntryFrequency("FIXED");
-                          setRevMonth(month === 0 ? new Date().getMonth() + 1 : month);
-                          setRevYear(year);
-                          setRevenueModal(true);
-                        }}>
+                        <Button size="xs" color="teal" leftSection={<IconPlus size={14} />} onClick={() => handleOpenAddRevenue("REIMBURSEMENT")}>
                           Ajouter un Remboursement
                         </Button>
                       )}
                     </Group>
-                    <Table highlightOnHover>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Libellé</Table.Th>
-                          <Table.Th>Montant</Table.Th>
-                          {!isReadOnly && <Table.Th visibleFrom="md">Action</Table.Th>}
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {data?.reimbursements?.map((r: any) => {
-                          const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
-                          return (
-                            <Table.Tr
-                              key={r.id}
-                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
-                              onClick={() => handleRowClick(r, "REIMBURSEMENT")}
-                            >
-                              <Table.Td fw={600}>
-                                <Text size="sm" fw={600}>{r.title}</Text>
-                              </Table.Td>
-                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : "teal.4"}>
-                                +{r.amount.toFixed(2)} €
-                              </Table.Td>
-                              {!isReadOnly && (
-                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
-                                  <Group gap={4}>
-                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                      <ActionIcon
-                                        color={isItemDisabled ? "teal" : "gray"}
-                                        variant={isItemDisabled ? "light" : "subtle"}
-                                        onClick={() => handleToggleDisableItem(r, "REVENUE")}
-                                      >
-                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <Tooltip label="Ajuster ou modifier">
-                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                        id: r.id,
-                                        title: r.title,
-                                        type: "REVENUE",
-                                        subType: r.type,
-                                        currentAmount: r.amount,
-                                        originalAmount: r.originalAmount,
-                                        overrideAmount: r.overrideAmount,
-                                        isDisabled: r.isDisabled,
-                                        hasOverride: r.hasOverride,
-                                      })}>
-                                        <IconEdit size={16} />
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
-                                      <IconTrash size={16} />
-                                    </ActionIcon>
-                                  </Group>
+                    <Table.ScrollContainer minWidth={300}>
+                      <Table highlightOnHover style={{ tableLayout: "auto", width: "100%" }}>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th style={{ width: "100%" }}>Libellé</Table.Th>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Montant</Table.Th>
+                            {!isReadOnly && <Table.Th visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }}>Action</Table.Th>}
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {data?.reimbursements?.map((r: any) => {
+                            const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
+                            return (
+                              <Table.Tr
+                                key={r.id}
+                                style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                                onClick={() => handleRowClick(r, "REIMBURSEMENT")}
+                              >
+                                <Table.Td fw={600} style={{ width: "100%" }}>
+                                  <Text size="sm" fw={600}>{r.title}</Text>
                                 </Table.Td>
-                              )}
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                      <Table.Tfoot>
-                        <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
-                          <Table.Td colSpan={1}>
-                            <Text size="sm" fw={400} c="white">
-                              Total
-                            </Text>
-                          </Table.Td>
-                          <Table.Td fw={400} c="white">
-                            +{data?.summary?.totalReimbursements ? data.summary.totalReimbursements.toFixed(2) : "0.00"} €
-                          </Table.Td>
-                          {!isReadOnly && <Table.Td visibleFrom="md" />}
-                        </Table.Tr>
-                      </Table.Tfoot>
-                    </Table>
+                                <Table.Td fw={700} c={isItemDisabled ? "dimmed" : "teal.4"} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  +{r.amount.toFixed(2)} €
+                                </Table.Td>
+                                {!isReadOnly && (
+                                  <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                                    <Group gap={4} wrap="nowrap">
+                                      <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                        <ActionIcon
+                                          color={isItemDisabled ? "teal" : "gray"}
+                                          variant={isItemDisabled ? "light" : "subtle"}
+                                          onClick={() => handleToggleDisableItem(r, "REVENUE")}
+                                        >
+                                          {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <Tooltip label="Ajuster ou modifier">
+                                        <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                          id: r.id,
+                                          title: r.title,
+                                          type: "REVENUE",
+                                          subType: r.type,
+                                          currentAmount: r.amount,
+                                          originalAmount: r.originalAmount,
+                                          overrideAmount: r.overrideAmount,
+                                          isDisabled: r.isDisabled,
+                                          hasOverride: r.hasOverride,
+                                        })}>
+                                          <IconEdit size={16} />
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <ActionIcon color="red" variant="subtle" onClick={() => deleteRevenue(activeWalletId, r.id).then(loadData)}>
+                                        <IconTrash size={16} />
+                                      </ActionIcon>
+                                    </Group>
+                                  </Table.Td>
+                                )}
+                              </Table.Tr>
+                            );
+                          })}
+                        </Table.Tbody>
+                        <Table.Tfoot>
+                          <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
+                            <Table.Td colSpan={1} style={{ width: "100%" }}>
+                              <Text size="sm" fw={400} c="white">
+                                Total
+                              </Text>
+                            </Table.Td>
+                            <Table.Td fw={400} c="white" style={{ width: 1, whiteSpace: "nowrap" }}>
+                              +{data?.summary?.totalReimbursements ? data.summary.totalReimbursements.toFixed(2) : "0.00"} €
+                            </Table.Td>
+                            {!isReadOnly && <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} />}
+                          </Table.Tr>
+                        </Table.Tfoot>
+                      </Table>
+                    </Table.ScrollContainer>
                   </Paper>
                 </Grid.Col>
               </Grid>
@@ -2716,244 +2870,248 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               {/* Section Charges Récurrentes & Échéances */}
               <Grid>
                 <Grid.Col span={{ base: 12, md: 6 }}>
-                  <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <Paper p={{ base: "xs", sm: "md", md: "lg" }} radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                     <Group justify="space-between" mb="md">
                       <Title order={4} style={{ color: "#fff" }}>
                         Charges Récurrentes
                       </Title>
                       {!isReadOnly && (
-                        <Button size="xs" color="indigo" leftSection={<IconPlus size={14} />} onClick={() => setRecurringModal(true)}>
+                        <Button size="xs" color="indigo" leftSection={<IconPlus size={14} />} onClick={handleOpenAddRecurring}>
                           Ajouter une charge
                         </Button>
                       )}
                     </Group>
-                    <Table highlightOnHover>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleRecSort("title")}>
-                            <Group gap={4} wrap="nowrap">
-                              <Text size="xs" fw={700}>Libellé</Text>
-                              {recSortField === "title" ? (
-                                recSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                              ) : (
-                                <IconSelector size={14} style={{ opacity: 0.3 }} />
-                              )}
-                            </Group>
-                          </Table.Th>
-                          <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleRecSort("category")}>
-                            <Group gap={4} wrap="nowrap">
-                              <Text size="xs" fw={700}>Catégorie</Text>
-                              {recSortField === "category" ? (
-                                recSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                              ) : (
-                                <IconSelector size={14} style={{ opacity: 0.3 }} />
-                              )}
-                            </Group>
-                          </Table.Th>
-                          <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleRecSort("dayOfMonth")}>
-                            <Group gap={4} wrap="nowrap">
-                              <Text size="xs" fw={700}>Jour</Text>
-                              {recSortField === "dayOfMonth" ? (
-                                recSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                              ) : (
-                                <IconSelector size={14} style={{ opacity: 0.3 }} />
-                              )}
-                            </Group>
-                          </Table.Th>
-                          <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleRecSort("amount")}>
-                            <Group gap={4} wrap="nowrap">
-                              <Text size="xs" fw={700}>Montant</Text>
-                              {recSortField === "amount" ? (
-                                recSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                              ) : (
-                                <IconSelector size={14} style={{ opacity: 0.3 }} />
-                              )}
-                            </Group>
-                          </Table.Th>
-                          {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {sortedRecurring.map((r: any) => {
-                          const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
-                          return (
-                            <Table.Tr
-                              key={r.id}
-                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
-                              onClick={() => handleRowClick(r, "RECURRING")}
-                            >
-                              <Table.Td fw={600}>
-                                <Text size="sm" fw={600}>{r.title}</Text>
-                                {r.startMonth && r.startYear && (
-                                  <Text size="xs" c="dimmed">
-                                    Depuis {r.startMonth < 10 ? `0${r.startMonth}` : r.startMonth}/{r.startYear}
-                                  </Text>
+                    <Table.ScrollContainer minWidth={300}>
+                      <Table highlightOnHover style={{ tableLayout: "auto", width: "100%" }}>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleRecSort("category")}>
+                              <Group gap={2} wrap="nowrap">
+                                <Text size="xs" fw={700}>Catégorie</Text>
+                                {recSortField === "category" ? (
+                                  recSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                                ) : (
+                                  <IconSelector size={12} style={{ opacity: 0.3 }} />
                                 )}
-                              </Table.Td>
-                              <Table.Td>
-                                {renderCategoryBadge(r.category)}
-                              </Table.Td>
-                              <Table.Td fw={600}>{r.dayOfMonth}</Table.Td>
-                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : `${getCategoryColor(r.category)}.4`}>
-                                -{r.amount.toFixed(2)} €
-                              </Table.Td>
-                              {!isReadOnly && (
-                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
-                                  <Group gap={4}>
-                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                      <ActionIcon
-                                        color={isItemDisabled ? "teal" : "gray"}
-                                        variant={isItemDisabled ? "light" : "subtle"}
-                                        onClick={() => handleToggleDisableItem(r, "RECURRING")}
-                                      >
-                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <Tooltip label="Ajuster ou modifier">
-                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                        id: r.id,
-                                        title: r.title,
-                                        type: "RECURRING",
-                                        category: r.category,
-                                        dayOfMonth: r.dayOfMonth,
-                                        startMonth: r.startMonth,
-                                        startYear: r.startYear,
-                                        currentAmount: r.amount,
-                                        originalAmount: r.originalAmount,
-                                        overrideAmount: r.overrideAmount,
-                                        isDisabled: r.isDisabled,
-                                        hasOverride: r.hasOverride,
-                                      })}>
-                                        <IconEdit size={16} />
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteRecurringExpense(activeWalletId, r.id).then(loadData)}>
-                                      <IconTrash size={16} />
-                                    </ActionIcon>
-                                  </Group>
+                              </Group>
+                            </Table.Th>
+                            <Table.Th style={{ cursor: "pointer", userSelect: "none", width: "100%" }} onClick={() => handleRecSort("title")}>
+                              <Group gap={2} wrap="nowrap">
+                                <Text size="xs" fw={700}>Libellé</Text>
+                                {recSortField === "title" ? (
+                                  recSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                                ) : (
+                                  <IconSelector size={12} style={{ opacity: 0.3 }} />
+                                )}
+                              </Group>
+                            </Table.Th>
+                            <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleRecSort("dayOfMonth")}>
+                              <Group gap={2} wrap="nowrap">
+                                <Text size="xs" fw={700}>Jour</Text>
+                                {recSortField === "dayOfMonth" ? (
+                                  recSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                                ) : (
+                                  <IconSelector size={12} style={{ opacity: 0.3 }} />
+                                )}
+                              </Group>
+                            </Table.Th>
+                            <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleRecSort("amount")}>
+                              <Group gap={2} wrap="nowrap">
+                                <Text size="xs" fw={700}>Montant</Text>
+                                {recSortField === "amount" ? (
+                                  recSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                                ) : (
+                                  <IconSelector size={12} style={{ opacity: 0.3 }} />
+                                )}
+                              </Group>
+                            </Table.Th>
+                            {!isReadOnly && <Table.Th visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }}>Actions</Table.Th>}
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {sortedRecurring.map((r: any) => {
+                            const isItemDisabled = Boolean(r.isDisabled || (r.hasOverride && r.amount === 0));
+                            return (
+                              <Table.Tr
+                                key={r.id}
+                                style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                                onClick={() => handleRowClick(r, "RECURRING")}
+                              >
+                                <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  {renderCategoryBadge(r.category)}
                                 </Table.Td>
-                              )}
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                      <Table.Tfoot>
-                        <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
-                          <Table.Td colSpan={3}>
-                            <Text size="sm" fw={400} c="white">
-                              Total
-                            </Text>
-                          </Table.Td>
-                          <Table.Td fw={400} c="white">
-                            -{data?.summary?.totalRecurring ? data.summary.totalRecurring.toFixed(2) : "0.00"} €
-                          </Table.Td>
-                          {!isReadOnly && <Table.Td visibleFrom="md" />}
-                        </Table.Tr>
-                      </Table.Tfoot>
-                    </Table>
+                                <Table.Td style={{ width: "100%" }}>
+                                  <Text size="sm" fw={600}>{r.title}</Text>
+                                  {r.startMonth && r.startYear && (
+                                    <Text size="xs" c="dimmed">
+                                      Depuis {r.startMonth < 10 ? `0${r.startMonth}` : r.startMonth}/{r.startYear}
+                                    </Text>
+                                  )}
+                                </Table.Td>
+                                <Table.Td fw={600} style={{ width: 1, whiteSpace: "nowrap" }}>{r.dayOfMonth}</Table.Td>
+                                <Table.Td fw={700} c={isItemDisabled ? "dimmed" : getCategoryTextColor(r.category)} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  -{r.amount.toFixed(2)} €
+                                </Table.Td>
+                                {!isReadOnly && (
+                                  <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                                    <Group gap={4} wrap="nowrap">
+                                      <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                        <ActionIcon
+                                          color={isItemDisabled ? "teal" : "gray"}
+                                          variant={isItemDisabled ? "light" : "subtle"}
+                                          onClick={() => handleToggleDisableItem(r, "RECURRING")}
+                                        >
+                                          {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <Tooltip label="Ajuster ou modifier">
+                                        <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                          id: r.id,
+                                          title: r.title,
+                                          type: "RECURRING",
+                                          category: r.category,
+                                          dayOfMonth: r.dayOfMonth,
+                                          startMonth: r.startMonth,
+                                          startYear: r.startYear,
+                                          currentAmount: r.amount,
+                                          originalAmount: r.originalAmount,
+                                          overrideAmount: r.overrideAmount,
+                                          isDisabled: r.isDisabled,
+                                          hasOverride: r.hasOverride,
+                                        })}>
+                                          <IconEdit size={16} />
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <ActionIcon color="red" variant="subtle" onClick={() => deleteRecurringExpense(activeWalletId, r.id).then(loadData)}>
+                                        <IconTrash size={16} />
+                                      </ActionIcon>
+                                    </Group>
+                                  </Table.Td>
+                                )}
+                              </Table.Tr>
+                            );
+                          })}
+                        </Table.Tbody>
+                        <Table.Tfoot>
+                          <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
+                            <Table.Td colSpan={3} style={{ width: "100%" }}>
+                              <Text size="sm" fw={400} c="white">
+                                Total
+                              </Text>
+                            </Table.Td>
+                            <Table.Td fw={400} c="white" style={{ width: 1, whiteSpace: "nowrap" }}>
+                              -{data?.summary?.totalRecurring ? data.summary.totalRecurring.toFixed(2) : "0.00"} €
+                            </Table.Td>
+                            {!isReadOnly && <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} />}
+                          </Table.Tr>
+                        </Table.Tfoot>
+                      </Table>
+                    </Table.ScrollContainer>
                   </Paper>
                 </Grid.Col>
 
                 <Grid.Col span={{ base: 12, md: 6 }}>
-                  <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <Paper p={{ base: "xs", sm: "md", md: "lg" }} radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                     <Group justify="space-between" mb="md">
                       <Title order={4} style={{ color: "#fff" }}>
                         Paiements Échelonnés / Crédits
                       </Title>
                       {!isReadOnly && (
-                        <Button size="xs" color="violet" leftSection={<IconPlus size={14} />} onClick={() => setInstallmentModal(true)}>
+                        <Button size="xs" color="violet" leftSection={<IconPlus size={14} />} onClick={handleOpenAddInstallment}>
                           Ajouter un crédit
                         </Button>
                       )}
                     </Group>
-                    <Table highlightOnHover>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Libellé</Table.Th>
-                          <Table.Th>Catégorie</Table.Th>
-                          <Table.Th>Jour</Table.Th>
-                          <Table.Th>Montant/Mois</Table.Th>
-                          {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {data?.installments?.map((i: any) => {
-                          const isItemDisabled = Boolean(i.isDisabled || (i.hasOverride && i.amount === 0));
-                          return (
-                            <Table.Tr
-                              key={i.id}
-                              style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
-                              onClick={() => handleRowClick(i, "INSTALLMENT")}
-                            >
-                              <Table.Td fw={600}>
-                                <Text size="sm" fw={600}>{i.title}</Text>
-                                <Text size="xs" c="dimmed">
-                                  {i.startMonth}/{i.startYear} ➔ {i.endMonth}/{i.endYear}
-                                </Text>
-                              </Table.Td>
-                              <Table.Td>
-                                {renderCategoryBadge(i.category)}
-                              </Table.Td>
-                              <Table.Td fw={600}>{i.dayOfMonth}</Table.Td>
-                              <Table.Td fw={700} c={isItemDisabled ? "dimmed" : `${getCategoryColor(i.category)}.4`}>
-                                -{i.amount.toFixed(2)} €
-                              </Table.Td>
-                              {!isReadOnly && (
-                                <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
-                                  <Group gap={4}>
-                                    <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
-                                      <ActionIcon
-                                        color={isItemDisabled ? "teal" : "gray"}
-                                        variant={isItemDisabled ? "light" : "subtle"}
-                                        onClick={() => handleToggleDisableItem(i, "INSTALLMENT")}
-                                      >
-                                        {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <Tooltip label="Modifier le crédit">
-                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
-                                        id: i.id,
-                                        title: i.title,
-                                        type: "INSTALLMENT",
-                                        category: i.category,
-                                        dayOfMonth: i.dayOfMonth,
-                                        startMonth: i.startMonth,
-                                        startYear: i.startYear,
-                                        endMonth: i.endMonth,
-                                        endYear: i.endYear,
-                                        currentAmount: i.amount,
-                                        originalAmount: i.originalAmount || i.amount,
-                                        overrideAmount: i.overrideAmount,
-                                        isDisabled: i.isDisabled,
-                                        hasOverride: Boolean(i.hasOverride),
-                                      })}>
-                                        <IconEdit size={16} />
-                                      </ActionIcon>
-                                    </Tooltip>
-                                    <ActionIcon color="red" variant="subtle" onClick={() => deleteInstallment(activeWalletId, i.id).then(loadData)}>
-                                      <IconTrash size={16} />
-                                    </ActionIcon>
-                                  </Group>
+                    <Table.ScrollContainer minWidth={300}>
+                      <Table highlightOnHover style={{ tableLayout: "auto", width: "100%" }}>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Catégorie</Table.Th>
+                            <Table.Th style={{ width: "100%" }}>Libellé</Table.Th>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Jour</Table.Th>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Montant/Mois</Table.Th>
+                            {!isReadOnly && <Table.Th visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }}>Actions</Table.Th>}
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {data?.installments?.map((i: any) => {
+                            const isItemDisabled = Boolean(i.isDisabled || (i.hasOverride && i.amount === 0));
+                            return (
+                              <Table.Tr
+                                key={i.id}
+                                style={{ cursor: "pointer", opacity: isItemDisabled ? 0.4 : 1 }}
+                                onClick={() => handleRowClick(i, "INSTALLMENT")}
+                              >
+                                <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  {renderCategoryBadge(i.category)}
                                 </Table.Td>
-                              )}
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                      <Table.Tfoot>
-                        <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
-                          <Table.Td colSpan={3}>
-                            <Text size="sm" fw={400} c="white">
-                              Total
-                            </Text>
-                          </Table.Td>
-                          <Table.Td fw={400} c="white">
-                            -{data?.summary?.totalInstallments ? data.summary.totalInstallments.toFixed(2) : "0.00"} €
-                          </Table.Td>
-                          {!isReadOnly && <Table.Td visibleFrom="md" />}
-                        </Table.Tr>
-                      </Table.Tfoot>
-                    </Table>
+                                <Table.Td style={{ width: "100%" }}>
+                                  <Text size="sm" fw={600}>{i.title}</Text>
+                                  <Text size="xs" c="dimmed">
+                                    {i.startMonth}/{i.startYear} ➔ {i.endMonth}/{i.endYear}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td fw={600} style={{ width: 1, whiteSpace: "nowrap" }}>{i.dayOfMonth}</Table.Td>
+                                <Table.Td fw={700} c={isItemDisabled ? "dimmed" : getCategoryTextColor(i.category)} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  -{i.amount.toFixed(2)} €
+                                </Table.Td>
+                                {!isReadOnly && (
+                                  <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                                    <Group gap={4} wrap="nowrap">
+                                      <Tooltip label={isItemDisabled ? "Réactiver ce mois-ci" : "Désactiver ce mois-ci"}>
+                                        <ActionIcon
+                                          color={isItemDisabled ? "teal" : "gray"}
+                                          variant={isItemDisabled ? "light" : "subtle"}
+                                          onClick={() => handleToggleDisableItem(i, "INSTALLMENT")}
+                                        >
+                                          {isItemDisabled ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <Tooltip label="Modifier le crédit">
+                                        <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditModal({
+                                          id: i.id,
+                                          title: i.title,
+                                          type: "INSTALLMENT",
+                                          category: i.category,
+                                          dayOfMonth: i.dayOfMonth,
+                                          startMonth: i.startMonth,
+                                          startYear: i.startYear,
+                                          endMonth: i.endMonth,
+                                          endYear: i.endYear,
+                                          currentAmount: i.amount,
+                                          originalAmount: i.originalAmount || i.amount,
+                                          overrideAmount: i.overrideAmount,
+                                          isDisabled: i.isDisabled,
+                                          hasOverride: Boolean(i.hasOverride),
+                                        })}>
+                                          <IconEdit size={16} />
+                                        </ActionIcon>
+                                      </Tooltip>
+                                      <ActionIcon color="red" variant="subtle" onClick={() => deleteInstallment(activeWalletId, i.id).then(loadData)}>
+                                        <IconTrash size={16} />
+                                      </ActionIcon>
+                                    </Group>
+                                  </Table.Td>
+                                )}
+                              </Table.Tr>
+                            );
+                          })}
+                        </Table.Tbody>
+                        <Table.Tfoot>
+                          <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
+                            <Table.Td colSpan={3} style={{ width: "100%" }}>
+                              <Text size="sm" fw={400} c="white">
+                                Total
+                              </Text>
+                            </Table.Td>
+                            <Table.Td fw={400} c="white" style={{ width: 1, whiteSpace: "nowrap" }}>
+                              -{data?.summary?.totalInstallments ? data.summary.totalInstallments.toFixed(2) : "0.00"} €
+                            </Table.Td>
+                            {!isReadOnly && <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} />}
+                          </Table.Tr>
+                        </Table.Tfoot>
+                      </Table>
+                    </Table.ScrollContainer>
                   </Paper>
                 </Grid.Col>
               </Grid>
@@ -2962,7 +3120,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
 
           {/* TAB 5: TRANSACTIONS QUOTIDIENNES */}
           <Tabs.Panel value="transactions">
-            <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <Paper p={{ base: "xs", sm: "md", md: "lg" }} radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
               <Group justify="space-between" mb="md">
                 <Title order={4} style={{ color: "#fff" }}>
                   Historique des Dépenses ({getMonthLabel(month)} {year})
@@ -3004,103 +3162,114 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   Aucune dépense trouvée.
                 </Text>
               ) : (
-                <Table highlightOnHover>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("day")}>
-                        <Group gap={4} wrap="nowrap">
-                          <span>Jour</span>
-                          {txSortField === "day" ? (
-                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                          ) : (
-                            <IconSelector size={14} style={{ opacity: 0.3 }} />
-                          )}
-                        </Group>
-                      </Table.Th>
-                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("title")}>
-                        <Group gap={4} wrap="nowrap">
-                          <span>Libellé</span>
-                          {txSortField === "title" ? (
-                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                          ) : (
-                            <IconSelector size={14} style={{ opacity: 0.3 }} />
-                          )}
-                        </Group>
-                      </Table.Th>
-                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("category")}>
-                        <Group gap={4} wrap="nowrap">
-                          <span>Catégorie</span>
-                          {txSortField === "category" ? (
-                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                          ) : (
-                            <IconSelector size={14} style={{ opacity: 0.3 }} />
-                          )}
-                        </Group>
-                      </Table.Th>
-                      <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleTxSort("amount")}>
-                        <Group gap={4} wrap="nowrap">
-                          <span>Montant</span>
-                          {txSortField === "amount" ? (
-                            txSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                          ) : (
-                            <IconSelector size={14} style={{ opacity: 0.3 }} />
-                          )}
-                        </Group>
-                      </Table.Th>
-                      {!isReadOnly && <Table.Th visibleFrom="md">Actions</Table.Th>}
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {sortedTransactions.map((t: any) => (
-                      <Table.Tr
-                        key={t.id}
-                        style={{ cursor: "pointer" }}
-                        onClick={() => handleRowClick(t, "TRANSACTION")}
-                      >
-                        <Table.Td fw={600}>{t.day}</Table.Td>
-                        <Table.Td>{t.title}</Table.Td>
-                        <Table.Td>
-                          {renderCategoryBadge(t.category)}
-                        </Table.Td>
-                        <Table.Td fw={700} c={`${getCategoryColor(t.category)}.4`}>
-                          -{t.amount.toFixed(2)} €
-                        </Table.Td>
-                        {!isReadOnly && (
-                          <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
-                            <Group gap={4}>
-                              <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditTransaction(t)}>
-                                <IconPencil size={16} />
-                              </ActionIcon>
-                              <ActionIcon color="red" variant="subtle" onClick={() => deleteTransaction(activeWalletId, t.id).then(loadData)}>
-                                <IconTrash size={16} />
-                              </ActionIcon>
-                            </Group>
-                          </Table.Td>
-                        )}
+                <Table.ScrollContainer minWidth={300}>
+                  <Table highlightOnHover style={{ tableLayout: "auto", width: "100%" }}>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleTxSort("category")}>
+                          <Group gap={2} wrap="nowrap">
+                            <span>Catégorie</span>
+                            {txSortField === "category" ? (
+                              txSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                            ) : (
+                              <IconSelector size={12} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none", width: "100%" }} onClick={() => handleTxSort("title")}>
+                          <Group gap={2} wrap="nowrap">
+                            <span>Libellé</span>
+                            {txSortField === "title" ? (
+                              txSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                            ) : (
+                              <IconSelector size={12} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleTxSort("day")}>
+                          <Group gap={2} wrap="nowrap">
+                            <span>Jour</span>
+                            {txSortField === "day" ? (
+                              txSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                            ) : (
+                              <IconSelector size={12} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleTxSort("amount")}>
+                          <Group gap={2} wrap="nowrap">
+                            <span>Montant</span>
+                            {txSortField === "amount" ? (
+                              txSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                            ) : (
+                              <IconSelector size={12} style={{ opacity: 0.3 }} />
+                            )}
+                          </Group>
+                        </Table.Th>
+                        {!isReadOnly && <Table.Th visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }}>Actions</Table.Th>}
                       </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                  <Table.Tfoot>
-                    <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
-                      <Table.Td colSpan={3}>
-                        <Group justify="space-between" align="center">
-                          <Text size="sm" fw={700} c="white">
-                            Total des dépenses
-                          </Text>
-                          {filterCategory && (
-                            <Badge size="xs" color="cyan" variant="light">
-                              Filtre : {filterCategory}
-                            </Badge>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {sortedTransactions.map((t: any) => (
+                        <Table.Tr
+                          key={t.id}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => handleRowClick(t, "TRANSACTION")}
+                        >
+                          <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
+                            {renderCategoryBadge(t.category)}
+                          </Table.Td>
+                          <Table.Td style={{ width: "100%" }}>
+                            <Text size="sm" fw={500}>
+                              {t.title}
+                            </Text>
+                            {t.notes && t.notes.trim() !== "" && (
+                              <Text size="xs" c="dimmed" style={{ lineHeight: 1.2 }}>
+                                {t.notes}
+                              </Text>
+                            )}
+                          </Table.Td>
+                          <Table.Td fw={600} style={{ width: 1, whiteSpace: "nowrap" }}>{t.day}</Table.Td>
+                          <Table.Td fw={700} c={getCategoryTextColor(t.category)} style={{ width: 1, whiteSpace: "nowrap" }}>
+                            -{t.amount.toFixed(2)} €
+                          </Table.Td>
+                          {!isReadOnly && (
+                            <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                              <Group gap={4} wrap="nowrap">
+                                <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditTransaction(t)}>
+                                  <IconPencil size={16} />
+                                </ActionIcon>
+                                <ActionIcon color="red" variant="subtle" onClick={() => deleteTransaction(activeWalletId, t.id).then(loadData)}>
+                                  <IconTrash size={16} />
+                                </ActionIcon>
+                              </Group>
+                            </Table.Td>
                           )}
-                        </Group>
-                      </Table.Td>
-                      <Table.Td fw={800} c="red.4" style={{ fontSize: "15px" }}>
-                        -{filteredTransactions.reduce((acc: number, t: any) => acc + t.amount, 0).toFixed(2)} €
-                      </Table.Td>
-                      {!isReadOnly && <Table.Td visibleFrom="md" />}
-                    </Table.Tr>
-                  </Table.Tfoot>
-                </Table>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                    <Table.Tfoot>
+                      <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)" }}>
+                        <Table.Td colSpan={3} style={{ width: "100%" }}>
+                          <Group justify="space-between" align="center">
+                            <Text size="sm" fw={700} c="white">
+                              Total des dépenses
+                            </Text>
+                            {filterCategory && (
+                              <Badge size="xs" color="cyan" variant="light">
+                                Filtre : {filterCategory}
+                              </Badge>
+                            )}
+                          </Group>
+                        </Table.Td>
+                        <Table.Td fw={800} c="red.4" style={{ fontSize: "15px", width: 1, whiteSpace: "nowrap" }}>
+                          -{filteredTransactions.reduce((acc: number, t: any) => acc + t.amount, 0).toFixed(2)} €
+                        </Table.Td>
+                        {!isReadOnly && <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} />}
+                      </Table.Tr>
+                    </Table.Tfoot>
+                  </Table>
+                </Table.ScrollContainer>
               )}
             </Paper>
           </Tabs.Panel>
@@ -3258,16 +3427,16 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
             </Tabs.Panel>
           )}
 
-          {/* TAB 7: STATISTIQUES (Camembert interactif) */}
+          {/* TAB 7: STATISTIQUES */}
           <Tabs.Panel value="stats">
-            <Stack gap="md">
+            <Stack gap="lg">
               {/* Cartes KPI statistiques */}
               <Grid>
                 <Grid.Col span={{ base: 12, sm: 4 }}>
                   <Paper p="md" radius="md" style={{ backgroundColor: "#161d30", border: "1px solid rgba(255,255,255,0.06)" }}>
                     <Text size="xs" c="dimmed" fw={700}>REVENUS TOTAUX DU MOIS</Text>
                     <Text size="xl" fw={800} c="teal.3">
-                      +{statsData.totalRevenues.toFixed(2)} €
+                      +{statsSummary.totalRevenues.toFixed(2)} €
                     </Text>
                   </Paper>
                 </Grid.Col>
@@ -3275,9 +3444,9 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   <Paper p="md" radius="md" style={{ backgroundColor: "#161d30", border: "1px solid rgba(255,255,255,0.06)" }}>
                     <Text size="xs" c="dimmed" fw={700}>DÉPENSES TOTALES DU MOIS</Text>
                     <Text size="xl" fw={800} c="red.4">
-                      -{statsData.totalExpenses.toFixed(2)} €
+                      -{statsSummary.totalExpenses.toFixed(2)} €
                       <Text span size="xs" c="dimmed" ml={6}>
-                        ({statsData.totalRevenues > 0 ? ((statsData.totalExpenses / statsData.totalRevenues) * 100).toFixed(1) : 0}%)
+                        ({statsSummary.totalRevenues > 0 ? ((statsSummary.totalExpenses / statsSummary.totalRevenues) * 100).toFixed(1) : 0}%)
                       </Text>
                     </Text>
                   </Paper>
@@ -3286,126 +3455,353 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   <Paper p="md" radius="md" style={{ backgroundColor: "#161d30", border: "1px solid rgba(255,255,255,0.06)" }}>
                     <Text size="xs" c="dimmed" fw={700}>SOLDE DISPONIBLE / ÉPARGNE</Text>
                     <Text size="xl" fw={800} c="teal.4">
-                      +{statsData.unspent.toFixed(2)} €
+                      +{statsSummary.unspent.toFixed(2)} €
                       <Text span size="xs" c="dimmed" ml={6}>
-                        ({statsData.totalRevenues > 0 ? ((statsData.unspent / statsData.totalRevenues) * 100).toFixed(1) : 0}%)
+                        ({statsSummary.totalRevenues > 0 ? ((statsSummary.unspent / statsSummary.totalRevenues) * 100).toFixed(1) : 0}%)
                       </Text>
                     </Text>
                   </Paper>
                 </Grid.Col>
               </Grid>
 
-              <Grid>
-                {/* Camembert interactif */}
-                <Grid.Col span={{ base: 12, md: 7 }}>
-                  <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500 }}>
+              {/* Segmented Control pour la vue Statistiques */}
+              <SegmentedControl
+                value={statsMode}
+                onChange={setStatsMode}
+                data={[
+                  { label: "📊 Enveloppes Budget (Vue Globale)", value: "envelopes" },
+                  { label: "💸 Dépenses Quotidiennes (Libellés & Enveloppes)", value: "expenses" },
+                ]}
+                color="cyan"
+                bg="#161d30"
+                radius="md"
+                size="sm"
+                fullWidth
+              />
+
+              {/* MODE 1: ENVELOPPES OVERALL */}
+              {statsMode === "envelopes" && (
+                <Grid>
+                  <Grid.Col span={{ base: 12, md: 7 }}>
+                    <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500 }}>
+                      <Title order={4} style={{ color: "#fff" }} mb="xs">
+                        Répartition Globale par Enveloppe Budgétaire
+                      </Title>
+                      <Text size="xs" c="dimmed" mb="md">
+                        Vue d'ensemble de la consommation globale de vos enveloppes budgétaires (charges fixes, crédits et dépenses quotidiennes incluses).
+                      </Text>
+
+                      {overallEnvelopesStats.items.length === 0 ? (
+                        <Text size="sm" c="dimmed" ta="center" py="xl">
+                          Aucune enveloppe consommée pour ce mois.
+                        </Text>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={380}>
+                          <PieChart>
+                            <Pie
+                              data={overallEnvelopesStats.items}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={80}
+                              outerRadius={140}
+                              paddingAngle={2}
+                            >
+                              {overallEnvelopesStats.items.map((entry: any, index: number) => (
+                                <Cell key={`cell-env-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const d = payload[0].payload;
+                                  const pctTotal = overallEnvelopesStats.totalSpent > 0 ? ((d.value / overallEnvelopesStats.totalSpent) * 100).toFixed(1) : 0;
+                                  const pctRev = statsSummary.totalRevenues > 0 ? ((d.value / statsSummary.totalRevenues) * 100).toFixed(1) : 0;
+                                  return (
+                                    <Paper p="xs" radius="md" style={{ backgroundColor: "#1a2238", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }}>
+                                      <Group gap="xs" mb={2}>
+                                        {renderCategoryBadge(d.name)}
+                                      </Group>
+                                      <Text size="sm" fw={800} c="white" mt={4}>
+                                        {d.value.toFixed(2)} €
+                                      </Text>
+                                      <Text size="xs" c="dimmed">
+                                        {pctTotal}% du budget consommé ({pctRev}% du revenu)
+                                      </Text>
+                                      {d.hasLimit && (
+                                        <Text size="xs" c={d.value > d.limitAmount ? "red.4" : "teal.4"} fw={600} mt={2}>
+                                          Plafond : {d.limitAmount.toFixed(2)} € ({((d.value / d.limitAmount) * 100).toFixed(0)}%)
+                                        </Text>
+                                      )}
+                                    </Paper>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Paper>
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, md: 5 }}>
+                    <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500, overflowY: "auto" }}>
+                      <Title order={4} style={{ color: "#fff" }} mb="md">
+                        Détail par Enveloppe Budgétaire
+                      </Title>
+                      <Table highlightOnHover>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th style={{ width: "100%" }}>Enveloppe / Catégorie</Table.Th>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Montant</Table.Th>
+                            <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>% Consommé</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {overallEnvelopesStats.items.map((item: any, idx: number) => {
+                            const pct = overallEnvelopesStats.totalSpent > 0 ? (item.value / overallEnvelopesStats.totalSpent) * 100 : 0;
+                            return (
+                              <Table.Tr key={idx}>
+                                <Table.Td style={{ width: "100%" }}>
+                                  <Group gap={6} wrap="nowrap">
+                                    <Box style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: item.color, flexShrink: 0 }} />
+                                    {renderCategoryBadge(item.name)}
+                                  </Group>
+                                </Table.Td>
+                                <Table.Td fw={700} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  {item.value.toFixed(2)} €
+                                </Table.Td>
+                                <Table.Td fw={700} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                  <Group gap={6} align="center" wrap="nowrap">
+                                    <Text size="xs" fw={700}>{pct.toFixed(1)}%</Text>
+                                    <Progress value={Math.min(100, pct)} color={item.color} size="sm" style={{ width: 60 }} />
+                                  </Group>
+                                </Table.Td>
+                              </Table.Tr>
+                            );
+                          })}
+                        </Table.Tbody>
+                      </Table>
+                    </Paper>
+                  </Grid.Col>
+                </Grid>
+              )}
+
+              {/* MODE 2: DÉPENSES QUOTIDIENNES (2 Camemberts empilés) */}
+              {statsMode === "expenses" && (
+                <Stack gap="xl">
+                  {/* Camembert 1: Par Libellés de Dépenses */}
+                  <div>
                     <Title order={4} style={{ color: "#fff" }} mb="xs">
-                      Répartition des Dépenses
+                      1. Dépenses Quotidiennes par Libellés
                     </Title>
                     <Text size="xs" c="dimmed" mb="md">
-                      Survolez les sections du camembert pour visualiser la part de chaque dépense par rapport aux dépenses totales et au revenu.
+                      Ventilation détaillée des dépenses quotidiennes regroupées par intitulé de dépense.
                     </Text>
+                    <Grid>
+                      <Grid.Col span={{ base: 12, md: 7 }}>
+                        <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500 }}>
+                          {dailyExpensesByTitleStats.items.length === 0 ? (
+                            <Text size="sm" c="dimmed" ta="center" py="xl">
+                              Aucune dépense quotidienne enregistrée pour ce mois.
+                            </Text>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={430}>
+                              <PieChart>
+                                <Pie
+                                  data={dailyExpensesByTitleStats.items}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={80}
+                                  outerRadius={140}
+                                  paddingAngle={2}
+                                >
+                                  {dailyExpensesByTitleStats.items.map((entry: any, index: number) => (
+                                    <Cell key={`cell-title-${index}`} fill={entry.color} />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip
+                                  content={({ active, payload }) => {
+                                    if (active && payload && payload.length) {
+                                      const d = payload[0].payload;
+                                      const pctExp = dailyExpensesByTitleStats.total > 0 ? ((d.value / dailyExpensesByTitleStats.total) * 100).toFixed(1) : 0;
+                                      return (
+                                        <Paper p="xs" radius="md" style={{ backgroundColor: "#1a2238", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }}>
+                                          <Group gap="xs" mb={2}>
+                                            {renderCategoryBadge(d.category)}
+                                            <Text size="xs" fw={700}>
+                                              {d.name}
+                                            </Text>
+                                          </Group>
+                                          <Text size="sm" fw={800} c="white">
+                                            {d.value.toFixed(2)} €
+                                          </Text>
+                                          <Text size="xs" c="dimmed">
+                                            {pctExp}% du total des dépenses quotidiennes
+                                          </Text>
+                                        </Paper>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Paper>
+                      </Grid.Col>
 
-                    {statsData.items.length === 0 ? (
-                      <Text size="sm" c="dimmed" ta="center" py="xl">
-                        Aucune donnée de dépense disponible pour ce mois.
-                      </Text>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={380}>
-                        <PieChart>
-                          <Pie
-                            data={statsData.items}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={80}
-                            outerRadius={140}
-                            paddingAngle={2}
-                          >
-                            {statsData.items.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <RechartsTooltip
-                            content={({ active, payload }) => {
-                              if (active && payload && payload.length) {
-                                const d = payload[0].payload;
-                                const pctExp = statsData.totalExpenses > 0 ? ((d.value / statsData.totalExpenses) * 100).toFixed(1) : 0;
-                                const pctRev = statsData.totalRevenues > 0 ? ((d.value / statsData.totalRevenues) * 100).toFixed(1) : 0;
+                      <Grid.Col span={{ base: 12, md: 5 }}>
+                        <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500, overflowY: "auto" }}>
+                          <Title order={5} style={{ color: "#fff" }} mb="md">
+                            Détail par Intitulé
+                          </Title>
+                          <Table highlightOnHover>
+                            <Table.Thead>
+                              <Table.Tr>
+                                <Table.Th style={{ width: "100%" }}>Libellé</Table.Th>
+                                <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Montant</Table.Th>
+                                <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>% Dépenses</Table.Th>
+                              </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                              {dailyExpensesByTitleStats.items.map((item: any, idx: number) => {
+                                const pct = dailyExpensesByTitleStats.total > 0 ? (item.value / dailyExpensesByTitleStats.total) * 100 : 0;
                                 return (
-                                  <Paper p="xs" radius="md" style={{ backgroundColor: "#1a2238", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }}>
-                                    <Group gap="xs" mb={2}>
-                                      <Badge size="xs" color="cyan">
-                                        {d.type}
-                                      </Badge>
-                                      <Text size="xs" fw={700}>
-                                        {d.name}
-                                      </Text>
-                                    </Group>
-                                    <Text size="sm" fw={800} c="white">
-                                      {d.value.toFixed(2)} €
-                                    </Text>
-                                    <Text size="xs" c="dimmed">
-                                      {pctExp}% des dépenses ({pctRev}% du revenu)
-                                    </Text>
-                                  </Paper>
+                                  <Table.Tr key={idx}>
+                                    <Table.Td style={{ width: "100%" }}>
+                                      <Group gap={6} wrap="nowrap">
+                                        <Box style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: item.color, flexShrink: 0 }} />
+                                        <Text size="sm" fw={600}>{item.name}</Text>
+                                      </Group>
+                                    </Table.Td>
+                                    <Table.Td fw={700} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                      {item.value.toFixed(2)} €
+                                    </Table.Td>
+                                    <Table.Td fw={700} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                      <Group gap={6} align="center" wrap="nowrap">
+                                        <Text size="xs" fw={700}>{pct.toFixed(1)}%</Text>
+                                        <Progress value={Math.min(100, pct)} color="cyan" size="sm" style={{ width: 60 }} />
+                                      </Group>
+                                    </Table.Td>
+                                  </Table.Tr>
                                 );
-                              }
-                              return null;
-                            }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </Paper>
-                </Grid.Col>
+                              })}
+                            </Table.Tbody>
+                          </Table>
+                        </Paper>
+                      </Grid.Col>
+                    </Grid>
+                  </div>
 
-                {/* Tableau récapitulatif détaillé */}
-                <Grid.Col span={{ base: 12, md: 5 }}>
-                  <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500, overflowY: "auto" }}>
-                    <Title order={4} style={{ color: "#fff" }} mb="md">
-                      Détail des Postes de Dépenses
+                  {/* Camembert 2: Par Enveloppes ciblées uniquement sur les dépenses */}
+                  <div>
+                    <Title order={4} style={{ color: "#fff" }} mb="xs">
+                      2. Dépenses Quotidiennes par Enveloppes Budgétaires
                     </Title>
-                    <Table highlightOnHover>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Libellé / Poste</Table.Th>
-                          <Table.Th>Montant</Table.Th>
-                          <Table.Th>% Dépenses</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {statsData.items.map((item, idx) => {
-                          const pctExp = statsData.totalExpenses > 0 ? (item.value / statsData.totalExpenses) * 100 : 0;
-                          const pctRev = statsData.totalRevenues > 0 ? (item.value / statsData.totalRevenues) * 100 : 0;
-                          return (
-                            <Table.Tr key={idx}>
-                              <Table.Td fw={600}>
-                                <Group gap={6}>
-                                  <Box style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: item.color }} />
-                                  <Text size="sm" fw={600}>{item.name}</Text>
-                                </Group>
-                              </Table.Td>
-                              <Table.Td fw={700}>
-                                {item.value.toFixed(2)} €
-                              </Table.Td>
-                              <Table.Td fw={700} style={{ width: 120 }}>
-                                <Tooltip label={`${pctRev.toFixed(1)}% du revenu total`}>
-                                  <Group gap={6} align="center" wrap="nowrap">
-                                    <Text size="xs" fw={700}>{pctExp.toFixed(1)}%</Text>
-                                    <Progress value={Math.min(100, pctExp)} color="cyan" size="sm" style={{ flex: 1 }} />
-                                  </Group>
-                                </Tooltip>
-                              </Table.Td>
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                    </Table>
-                  </Paper>
-                </Grid.Col>
-              </Grid>
+                    <Text size="xs" c="dimmed" mb="md">
+                      Ventilation des dépenses quotidiennes regroupées par enveloppes / catégories d'enveloppe.
+                    </Text>
+                    <Grid>
+                      <Grid.Col span={{ base: 12, md: 7 }}>
+                        <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500 }}>
+                          {dailyExpensesByCategoryStats.items.length === 0 ? (
+                            <Text size="sm" c="dimmed" ta="center" py="xl">
+                              Aucune dépense quotidienne enregistrée pour ce mois.
+                            </Text>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={430}>
+                              <PieChart>
+                                <Pie
+                                  data={dailyExpensesByCategoryStats.items}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={80}
+                                  outerRadius={140}
+                                  paddingAngle={2}
+                                >
+                                  {dailyExpensesByCategoryStats.items.map((entry: any, index: number) => (
+                                    <Cell key={`cell-cat-${index}`} fill={entry.color} />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip
+                                  content={({ active, payload }) => {
+                                    if (active && payload && payload.length) {
+                                      const d = payload[0].payload;
+                                      const pctExp = dailyExpensesByCategoryStats.total > 0 ? ((d.value / dailyExpensesByCategoryStats.total) * 100).toFixed(1) : 0;
+                                      return (
+                                        <Paper p="xs" radius="md" style={{ backgroundColor: "#1a2238", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }}>
+                                          <Group gap="xs" mb={2}>
+                                            {renderCategoryBadge(d.name)}
+                                          </Group>
+                                          <Text size="sm" fw={800} c="white" mt={4}>
+                                            {d.value.toFixed(2)} €
+                                          </Text>
+                                          <Text size="xs" c="dimmed">
+                                            {pctExp}% des dépenses quotidiennes
+                                          </Text>
+                                        </Paper>
+                                      );
+                                    }
+                                    return null;
+                                  }}
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Paper>
+                      </Grid.Col>
+
+                      <Grid.Col span={{ base: 12, md: 5 }}>
+                        <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", height: 500, overflowY: "auto" }}>
+                          <Title order={5} style={{ color: "#fff" }} mb="md">
+                            Détail par Enveloppe de Dépense
+                          </Title>
+                          <Table highlightOnHover>
+                            <Table.Thead>
+                              <Table.Tr>
+                                <Table.Th style={{ width: "100%" }}>Catégorie / Enveloppe</Table.Th>
+                                <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>Montant</Table.Th>
+                                <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>% Dépenses</Table.Th>
+                              </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                              {dailyExpensesByCategoryStats.items.map((item: any, idx: number) => {
+                                const pct = dailyExpensesByCategoryStats.total > 0 ? (item.value / dailyExpensesByCategoryStats.total) * 100 : 0;
+                                return (
+                                  <Table.Tr key={idx}>
+                                    <Table.Td style={{ width: "100%" }}>
+                                      <Group gap={6} wrap="nowrap">
+                                        <Box style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: item.color, flexShrink: 0 }} />
+                                        {renderCategoryBadge(item.name)}
+                                      </Group>
+                                    </Table.Td>
+                                    <Table.Td fw={700} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                      {item.value.toFixed(2)} €
+                                    </Table.Td>
+                                    <Table.Td fw={700} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                      <Group gap={6} align="center" wrap="nowrap">
+                                        <Text size="xs" fw={700}>{pct.toFixed(1)}%</Text>
+                                        <Progress value={Math.min(100, pct)} color={item.color} size="sm" style={{ width: 60 }} />
+                                      </Group>
+                                    </Table.Td>
+                                  </Table.Tr>
+                                );
+                              })}
+                            </Table.Tbody>
+                          </Table>
+                        </Paper>
+                      </Grid.Col>
+                    </Grid>
+                  </div>
+                </Stack>
+              )}
             </Stack>
           </Tabs.Panel>
           {/* TAB 8: LISTE D'ACHAT (WISHLIST) */}
@@ -3505,7 +3901,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               </Grid>
 
               {/* Main Wishlist Table */}
-              <Paper p="lg" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <Paper p={{ base: "xs", sm: "md", md: "lg" }} radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                 <Group justify="space-between" mb="md">
                   <div>
                     <Title order={4} style={{ color: "#fff" }}>
@@ -3515,227 +3911,241 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                       Préconfigurez vos achats souhaités et déclenchez le paiement au moment voulu.
                     </Text>
                   </div>
-                  <Group gap="xs" wrap="wrap">
-                    <Select
+                  {!isReadOnly && (
+                    <Button
                       size="xs"
-                      aria-label="Trier la liste d'achat"
-                      value={`${wishlistSortField}-${wishlistSortOrder}`}
-                      onChange={(val) => {
-                        if (!val) return;
-                        const [field, order] = val.split("-") as [any, any];
-                        setWishlistSortField(field);
-                        setWishlistSortOrder(order);
-                      }}
-                      data={[
-                        { label: "Criticité (Plus urgente d'abord)", value: "priority-desc" },
-                        { label: "Criticité (Moins urgente d'abord)", value: "priority-asc" },
-                        { label: "Montant (Décroissant)", value: "amount-desc" },
-                        { label: "Montant (Croissant)", value: "amount-asc" },
-                        { label: "Libellé (A-Z)", value: "title-asc" },
-                        { label: "Libellé (Z-A)", value: "title-desc" },
-                        { label: "Catégorie (A-Z)", value: "category-asc" },
-                      ]}
-                      style={{ width: 230 }}
-                    />
-                    {!isReadOnly && (
-                      <Button
-                        size="xs"
-                        color="cyan"
-                        leftSection={<IconPlus size={14} />}
-                        onClick={handleOpenAddWishlist}
-                      >
-                        Ajouter un souhait d'achat
-                      </Button>
-                    )}
-                  </Group>
+                      color="cyan"
+                      leftSection={<IconPlus size={14} />}
+                      onClick={handleOpenAddWishlist}
+                    >
+                      Ajouter un souhait d'achat
+                    </Button>
+                  )}
                 </Group>
+
+                {/* Filter & Search Wishlist */}
+                <Grid mb="md" align="center">
+                  <Grid.Col span={{ base: 12, sm: 4, md: 3 }}>
+                    <Select
+                      placeholder="Toutes les catégories"
+                      aria-label="Filtrer par catégorie dans la liste d'achat"
+                      clearable
+                      value={filterWishlistCategory}
+                      onChange={(val) => setFilterWishlistCategory(val)}
+                      data={wishlistCategoryOptions}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 8, md: 9 }}>
+                    <TextInput
+                      placeholder="Rechercher par libellé ou description..."
+                      leftSection={<IconSearch size={16} />}
+                      value={searchWishlist}
+                      onChange={(e) => setSearchWishlist(e.target.value)}
+                    />
+                  </Grid.Col>
+                </Grid>
 
                 {(!data?.wishlistItems || data.wishlistItems.length === 0) ? (
                   <Text size="sm" c="dimmed" ta="center" py="xl">
                     Aucun achat en attente dans votre liste. Cliquez sur "Ajouter un souhait d'achat" pour planifier votre premier achat.
                   </Text>
                 ) : (
-                  <Table highlightOnHover>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th style={{ width: 40 }}>
-                          <Checkbox
-                            size="xs"
-                            color="cyan"
-                            checked={
-                              wishlistCalc.pendingItems.length > 0 &&
-                              wishlistCalc.pendingItems.every((i: any) => selectedWishlistIds.includes(i.id))
-                            }
-                            onChange={(e) => {
-                              if (e.currentTarget.checked) {
-                                setSelectedWishlistIds(wishlistCalc.pendingItems.map((i: any) => i.id));
-                              } else {
-                                setSelectedWishlistIds([]);
+                  <Table.ScrollContainer minWidth={300}>
+                    <Table highlightOnHover style={{ tableLayout: "auto", width: "100%" }}>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th style={{ width: 1, whiteSpace: "nowrap" }}>
+                            <Checkbox
+                              size="xs"
+                              color="cyan"
+                              checked={
+                                wishlistCalc.pendingItems.length > 0 &&
+                                wishlistCalc.pendingItems.every((i: any) => selectedWishlistIds.includes(i.id))
                               }
-                            }}
-                          />
-                        </Table.Th>
-                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("title")}>
-                          <Group gap={4} wrap="nowrap">
-                            <span>Libellé</span>
-                            {wishlistSortField === "title" ? (
-                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                            ) : (
-                              <IconSelector size={14} style={{ opacity: 0.3 }} />
-                            )}
-                          </Group>
-                        </Table.Th>
-                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("priority")}>
-                          <Group gap={4} wrap="nowrap">
-                            <span>Priorité</span>
-                            {wishlistSortField === "priority" ? (
-                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                            ) : (
-                              <IconSelector size={14} style={{ opacity: 0.3 }} />
-                            )}
-                          </Group>
-                        </Table.Th>
-                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("category")}>
-                          <Group gap={4} wrap="nowrap">
-                            <span>Catégorie</span>
-                            {wishlistSortField === "category" ? (
-                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                            ) : (
-                              <IconSelector size={14} style={{ opacity: 0.3 }} />
-                            )}
-                          </Group>
-                        </Table.Th>
-                        <Table.Th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => handleWishlistSort("amount")}>
-                          <Group gap={4} wrap="nowrap">
-                            <span>Montant Estimé</span>
-                            {wishlistSortField === "amount" ? (
-                              wishlistSortOrder === "asc" ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />
-                            ) : (
-                              <IconSelector size={14} style={{ opacity: 0.3 }} />
-                            )}
-                          </Group>
-                        </Table.Th>
-                        <Table.Th visibleFrom="md">Lien</Table.Th>
-                        {!isReadOnly && <Table.Th visibleFrom="md">Actions & Conversion</Table.Th>}
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {sortedWishlistItems.map((item: any) => {
-                        const isSelected = selectedWishlistIds.includes(item.id);
-                        let pColor = "blue";
-                        let pLabel = "Normal";
-                        if (item.priority === "URGENT") { pColor = "red"; pLabel = "Urgent"; }
-                        else if (item.priority === "IMPORTANT") { pColor = "orange"; pLabel = "Important"; }
-                        else if (item.priority === "MAJOR") { pColor = "yellow"; pLabel = "Majeur"; }
-                        else if (item.priority === "LOW") { pColor = "gray"; pLabel = "Faible"; }
-
-                        return (
-                          <Table.Tr
-                            key={item.id}
-                            style={{ cursor: "pointer" }}
-                            onClick={() => handleRowClick(item, "WISHLIST")}
-                          >
-                            <Table.Td onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
-                                size="xs"
-                                color="cyan"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  if (e.currentTarget.checked) {
-                                    setSelectedWishlistIds((prev) => [...prev, item.id]);
-                                  } else {
-                                    setSelectedWishlistIds((prev) => prev.filter((id) => id !== item.id));
-                                  }
-                                }}
-                              />
-                            </Table.Td>
-                            <Table.Td fw={600}>
-                              <Text size="sm" fw={600}>{item.title}</Text>
-                              {item.notes && (
-                                <Text size="xs" c="dimmed">
-                                  {item.notes}
-                                </Text>
-                              )}
-                            </Table.Td>
-                            <Table.Td>
-                              <Badge color={pColor} variant="filled" size="sm">
-                                {pLabel}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td>
-                              {renderCategoryBadge(item.category)}
-                            </Table.Td>
-                            <Table.Td fw={700} c="cyan.4">
-                              {item.amount.toFixed(2)} €
-                            </Table.Td>
-                            <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
-                              {item.url ? (
-                                <Tooltip label="Ouvrir le lien marchand">
-                                  <ActionIcon
-                                    component="a"
-                                    href={item.url.startsWith("http") ? item.url : `https://${item.url}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    size="sm"
-                                    color="cyan"
-                                    variant="subtle"
-                                  >
-                                    <IconExternalLink size={16} />
-                                  </ActionIcon>
-                                </Tooltip>
+                              onChange={(e) => {
+                                if (e.currentTarget.checked) {
+                                  setSelectedWishlistIds(wishlistCalc.pendingItems.map((i: any) => i.id));
+                                } else {
+                                  setSelectedWishlistIds([]);
+                                }
+                              }}
+                            />
+                          </Table.Th>
+                          <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleWishlistSort("priority")}>
+                            <Group gap={2} wrap="nowrap">
+                              <span>Priorité</span>
+                              {wishlistSortField === "priority" ? (
+                                wishlistSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
                               ) : (
-                                <Text size="xs" c="dimmed">—</Text>
+                                <IconSelector size={12} style={{ opacity: 0.3 }} />
                               )}
-                            </Table.Td>
-                            {!isReadOnly && (
-                              <Table.Td visibleFrom="md" onClick={(e) => e.stopPropagation()}>
-                                <Group gap={6}>
-                                  <Button
-                                    size="xs"
-                                    color="teal"
-                                    variant="light"
-                                    leftSection={<IconShoppingCart size={14} />}
-                                    onClick={() => handleOpenConvertWishlist(item)}
-                                  >
-                                    Déclencher l'achat
-                                  </Button>
-                                  <Tooltip label="Modifier le souhait">
-                                    <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditWishlist(item)}>
-                                      <IconEdit size={16} />
+                            </Group>
+                          </Table.Th>
+                          <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleWishlistSort("category")}>
+                            <Group gap={2} wrap="nowrap">
+                              <span>Catégorie</span>
+                              {wishlistSortField === "category" ? (
+                                wishlistSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                              ) : (
+                                <IconSelector size={12} style={{ opacity: 0.3 }} />
+                              )}
+                            </Group>
+                          </Table.Th>
+                          <Table.Th style={{ cursor: "pointer", userSelect: "none", width: "100%" }} onClick={() => handleWishlistSort("title")}>
+                            <Group gap={2} wrap="nowrap">
+                              <span>Libellé</span>
+                              {wishlistSortField === "title" ? (
+                                wishlistSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                              ) : (
+                                <IconSelector size={12} style={{ opacity: 0.3 }} />
+                              )}
+                            </Group>
+                          </Table.Th>
+                          <Table.Th visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }}>Lien</Table.Th>
+                          <Table.Th style={{ cursor: "pointer", userSelect: "none", width: 1, whiteSpace: "nowrap" }} onClick={() => handleWishlistSort("amount")}>
+                            <Group gap={2} wrap="nowrap">
+                              <span>Montant Estimé</span>
+                              {wishlistSortField === "amount" ? (
+                                wishlistSortOrder === "asc" ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />
+                              ) : (
+                                <IconSelector size={12} style={{ opacity: 0.3 }} />
+                              )}
+                            </Group>
+                          </Table.Th>
+                          {!isReadOnly && <Table.Th visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }}>Actions</Table.Th>}
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {sortedWishlistItems.map((item: any) => {
+                          const isSelected = selectedWishlistIds.includes(item.id);
+                          let pColor = "blue";
+                          let pLabel = "Normal";
+                          if (item.priority === "URGENT") { pColor = "red"; pLabel = "Urgent"; }
+                          else if (item.priority === "IMPORTANT") { pColor = "orange"; pLabel = "Important"; }
+                          else if (item.priority === "MAJOR") { pColor = "yellow"; pLabel = "Majeur"; }
+                          else if (item.priority === "LOW") { pColor = "gray"; pLabel = "Faible"; }
+
+                          return (
+                            <Table.Tr
+                              key={item.id}
+                              style={{ cursor: "pointer" }}
+                              onClick={() => handleRowClick(item, "WISHLIST")}
+                            >
+                              <Table.Td onClick={(e) => e.stopPropagation()} style={{ width: 1, whiteSpace: "nowrap" }}>
+                                <Checkbox
+                                  size="xs"
+                                  color="cyan"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.currentTarget.checked) {
+                                      setSelectedWishlistIds((prev) => [...prev, item.id]);
+                                    } else {
+                                      setSelectedWishlistIds((prev) => prev.filter((id) => id !== item.id));
+                                    }
+                                  }}
+                                />
+                              </Table.Td>
+                              <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
+                                <Badge
+                                  color={pColor}
+                                  variant="filled"
+                                  size="sm"
+                                  fullWidth={false}
+                                  styles={{
+                                    label: {
+                                      overflow: "visible",
+                                      textOverflow: "clip",
+                                      whiteSpace: "nowrap",
+                                    },
+                                  }}
+                                  style={{ width: "max-content", maxWidth: "none", whiteSpace: "nowrap" }}
+                                >
+                                  {pLabel}
+                                </Badge>
+                              </Table.Td>
+                              <Table.Td style={{ width: 1, whiteSpace: "nowrap" }}>
+                                {renderCategoryBadge(item.category)}
+                              </Table.Td>
+                              <Table.Td style={{ width: "100%" }}>
+                                <Text size="sm" fw={600}>{item.title}</Text>
+                                {item.notes && (
+                                  <Text size="xs" c="dimmed" style={{ lineHeight: 1.2 }}>
+                                    {item.notes}
+                                  </Text>
+                                )}
+                              </Table.Td>
+                              <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                                {item.url ? (
+                                  <Tooltip label="Ouvrir le lien marchand">
+                                    <ActionIcon
+                                      component="a"
+                                      href={item.url.startsWith("http") ? item.url : `https://${item.url}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      size="sm"
+                                      color="cyan"
+                                      variant="subtle"
+                                    >
+                                      <IconExternalLink size={16} />
                                     </ActionIcon>
                                   </Tooltip>
-                                  <ActionIcon color="red" variant="subtle" onClick={() => handleDeleteWishlist(item.id)}>
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                </Group>
+                                ) : (
+                                  <Text size="xs" c="dimmed">—</Text>
+                                )}
                               </Table.Td>
-                            )}
-                          </Table.Tr>
-                        );
-                      })}
-                    </Table.Tbody>
-                    <Table.Tfoot>
-                      <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-                        <Table.Td colSpan={4}>
-                          <Group justify="space-between" align="center">
-                            <Text size="sm" fw={700} c="white">
-                              Total de la liste ({data.wishlistItems.length} article{data.wishlistItems.length > 1 ? "s" : ""})
-                            </Text>
-                            {wishlistCalc.selectedItems.length > 0 && (
-                              <Badge size="xs" color="cyan" variant="light">
-                                Sélection : {wishlistCalc.selectedTotalAmount.toFixed(2)} € ({wishlistCalc.selectedItems.length})
-                              </Badge>
-                            )}
-                          </Group>
-                        </Table.Td>
-                        <Table.Td fw={800} c="cyan.3" style={{ fontSize: "15px" }}>
-                          {data.wishlistItems.reduce((acc: number, item: any) => acc + item.amount, 0).toFixed(2)} €
-                        </Table.Td>
-                        <Table.Td visibleFrom="md" />
-                        {!isReadOnly && <Table.Td visibleFrom="md" />}
-                      </Table.Tr>
-                    </Table.Tfoot>
-                  </Table>
+                              <Table.Td fw={700} c="cyan.4" style={{ width: 1, whiteSpace: "nowrap" }}>
+                                {item.amount.toFixed(2)} €
+                              </Table.Td>
+                              {!isReadOnly && (
+                                <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                                  <Group gap={6} wrap="nowrap">
+                                    <Button
+                                      size="xs"
+                                      color="teal"
+                                      variant="light"
+                                      leftSection={<IconShoppingCart size={14} />}
+                                      onClick={() => handleOpenConvertWishlist(item)}
+                                    >
+                                      Déclencher l'achat
+                                    </Button>
+                                    <Tooltip label="Modifier le souhait">
+                                      <ActionIcon color="blue" variant="subtle" onClick={() => handleOpenEditWishlist(item)}>
+                                        <IconEdit size={16} />
+                                      </ActionIcon>
+                                    </Tooltip>
+                                    <ActionIcon color="red" variant="subtle" onClick={() => handleDeleteWishlist(item.id)}>
+                                      <IconTrash size={16} />
+                                    </ActionIcon>
+                                  </Group>
+                                </Table.Td>
+                              )}
+                            </Table.Tr>
+                          );
+                        })}
+                      </Table.Tbody>
+                      <Table.Tfoot>
+                        <Table.Tr style={{ borderTop: "2px solid rgba(255,255,255,0.12)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+                          <Table.Td colSpan={4} style={{ width: "100%" }}>
+                            <Group justify="space-between" align="center">
+                              <Text size="sm" fw={700} c="white">
+                                Total de la liste ({sortedWishlistItems.length} article{sortedWishlistItems.length > 1 ? "s" : ""})
+                              </Text>
+                              {wishlistCalc.selectedItems.length > 0 && (
+                                <Badge size="xs" color="cyan" variant="light">
+                                  Sélection : {wishlistCalc.selectedTotalAmount.toFixed(2)} € ({wishlistCalc.selectedItems.length})
+                                </Badge>
+                              )}
+                            </Group>
+                          </Table.Td>
+                          <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} />
+                          <Table.Td fw={800} c="cyan.3" style={{ fontSize: "15px", width: 1, whiteSpace: "nowrap" }}>
+                            {sortedWishlistItems.reduce((acc: number, item: any) => acc + item.amount, 0).toFixed(2)} €
+                          </Table.Td>
+                          {!isReadOnly && <Table.Td visibleFrom="md" style={{ width: 1, whiteSpace: "nowrap" }} />}
+                        </Table.Tr>
+                      </Table.Tfoot>
+                    </Table>
+                  </Table.ScrollContainer>
                 )}
               </Paper>
             </Stack>
