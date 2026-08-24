@@ -45,6 +45,11 @@ export default function LoginPage() {
   const [isLdapEnabled, setIsLdapEnabled] = useState<boolean | null>(null);
   const [mode, setMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
 
+  const isDevLoginEnabled =
+    process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN !== undefined && process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN !== ""
+      ? process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === "true"
+      : process.env.NODE_ENV === "development";
+
   // Login form state
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -408,8 +413,8 @@ export default function LoginPage() {
                 </form>
               )}
 
-              {/* ── MODE DÉVELOPPEMENT LOCAL (OPTIONNEL) ── */}
-              {isLdapEnabled === false && (
+              {/* ── MODE DÉVELOPPEMENT LOCAL (SI ACTIF EN ENV) ── */}
+              {isDevLoginEnabled && (
                 <>
                   <Divider color="rgba(255,255,255,0.08)" my="xs" />
                   <Paper

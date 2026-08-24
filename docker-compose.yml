@@ -4,7 +4,7 @@ services:
   postgres:
     image: postgres:latest
     container_name: my-wallet-postgres
-    restart: always
+#    restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -43,7 +43,7 @@ services:
       - LDAP_USERNAME_ATTRIBUTE=${LDAP_USERNAME_ATTRIBUTE:-sAMAccountName}
       - LDAP_BIND_DN=${LDAP_BIND_DN:-}
       - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD:-}
-    restart: always
+#    restart: always
 
 volumes:
   postgres-data:

@@ -63,9 +63,11 @@ model Revenue {
   wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   title     String
   amount    Float
-  type      String   // "FIXED", "VARIABLE"
+  type      String   // "FIXED", "VARIABLE", "REIMBURSEMENT", "REIMBURSEMENT_FIXED"
   month     Int      // 1-12
   year      Int      // e.g., 2026
+  endMonth  Int?
+  endYear   Int?
   date      DateTime @default(now())
 }
 
@@ -80,6 +82,8 @@ model RecurringExpense {
   dayOfMonth Int      // 1-31
   startMonth Int?
   startYear  Int?
+  endMonth   Int?
+  endYear    Int?
 }
 
 model InstallmentPayment {

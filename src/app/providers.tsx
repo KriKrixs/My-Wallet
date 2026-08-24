@@ -9,6 +9,13 @@ import "@mantine/charts/styles.css";
 const theme = createTheme({
   primaryColor: "teal",
   fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+  components: {
+    Modal: {
+      defaultProps: {
+        closeOnClickOutside: false,
+      },
+    },
+  },
   colors: {
     dark: [
       "#C1C2C5",

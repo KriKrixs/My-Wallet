@@ -160,6 +160,14 @@ export const authOptions: NextAuthOptions = {
         role: { label: "Role", type: "text" },
       },
       async authorize(credentials) {
+        const isDevLoginEnabled =
+          process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN !== undefined && process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN !== ""
+            ? process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === "true"
+            : process.env.NODE_ENV === "development";
+
+        if (!isDevLoginEnabled) {
+          throw new Error("Mode de connexion de développement désactivé.");
+        }
         if (!credentials?.email) return null;
 
         let user = await db.user.findUnique({

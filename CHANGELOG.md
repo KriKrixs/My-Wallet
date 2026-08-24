@@ -2,6 +2,29 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.4.0] - 2026-08-24
+
+### 🛡️ Préservation de l'Historique lors de la Suppression
+* **Fin Automatique au Mois Précédent (`endMonth` / `endYear`)** : Lors de la suppression d'un revenu fixe, d'un remboursement fixe, d'une charge récurrente ou d'un crédit/paiement échelonné, si l'élément existait sur des mois antérieurs, il est automatiquement clôturé au mois précédent au lieu d'être supprimé définitivement de la base de données.
+* **Intégrité Totale des Mois Passés** : L'historique, les bilans financiers, les reliquats et les graphiques des mois passés restent 100 % intacts et inchangés, tandis que l'élément cesse d'apparaître pour le mois en cours et tous les mois futurs.
+* **Suppression Physique Sécurisée** : Si l'élément a été créé durant le mois en cours ou un mois futur, il est supprimé définitivement sans laisser de trace orpheline.
+
+### 📅 Déplacement / Report des Remboursements & Revenus Variables
+* **Déplacement Direct dans la Modale de Modification (`editOverrideModal`)** : Pour tout remboursement ou revenu variable, la modale de modification propose désormais deux champs dédiés (*Mois d'imputation / destination* et *Année d'imputation*).
+* **Mise à Jour Complète en Une Seule Étape** : Permet de modifier simultanément le libellé, le montant, la nature et le mois/année de destination sans bouton ou modale séparée.
+
+### 📊 Filtre & Lignes Totales sur les Graphiques de Statistiques
+* **Lignes Totales sur les Tableaux de Détails (`Table.Tfoot`)** : Ajout d'une ligne de totalisation bien en évidence au bas de chaque tableau de détail des statistiques (Vue Globale des Enveloppes, Détail par Intitulé de Dépense et Détail par Enveloppe de Dépense) affichant le montant total consommé et 100%.
+* **Sélecteur de Catégorie Dédié (`Select`)** : Ajout d'un sélecteur déroulant de catégorie au sommet de l'analyse des dépenses quotidiennes (Mode 2) permettant de filtrer les graphiques par enveloppe/catégorie spécifique (*Toutes les catégories* par défaut).
+* **Mise à Jour Dynamique des Camemberts & Légendes** : Le camembert des dépenses par libellé et celui des enveloppes se mettent à jour instantanément pour afficher uniquement les dépenses associées à la catégorie sélectionnée (avec recalcul du montant total).
+
+### 🔐 Sécurisation & Contrôle de l'Authentification (Mode Développeur)
+* **Variable d'Environnement Dédiée (`NEXT_PUBLIC_ENABLE_DEV_LOGIN`)** : Contrôle précis de l'affichage et du fonctionnement du mode développeur (connexion rapide avec profils de démo) via la variable `NEXT_PUBLIC_ENABLE_DEV_LOGIN` dans le fichier `.env` (activé si `"true"`, désactivé si `"false"` ou en production).
+
+### 🔒 Persistance & Verrouillage des Modales (`closeOnClickOutside: false`)
+* **Verrouillage au Clic Extérieur sur Toutes les Modales** : Configuration globale (`MantineProvider`) et explicite sur les 15 modales de l'application (Nouveau Portefeuille, Dépenses, Revenus, Charges, Crédits, Enveloppes, Souhaits d'achat, Report de déficit, Partage, etc.) pour empêcher la fermeture involontaire lors d'un clic accidentel en dehors de la fenêtre modale.
+* **Badge de Version Header (`v1.4.0`)** : Mise à jour du badge de version dans le header et synchronisation avec `package.json`.
+
 ## [v1.3.1] - 2026-08-10
 
 ### 🎨 Garanties de Couleurs des Enveloppes Budgétaires sur les Camemberts

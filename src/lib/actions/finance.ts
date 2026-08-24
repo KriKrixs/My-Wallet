@@ -287,8 +287,16 @@ export async function getRevenues(walletId: string, month: number, year: number)
     if (r.type === "FIXED" || r.type === "REIMBURSEMENT_FIXED") {
       // Les revenus et remboursements fixes se répercutent automatiquement sur tous les mois suivants
       const createdBeforeOrInMonth =
-        r.year < year || (r.year === year && r.month <= month);
-      return createdBeforeOrInMonth;
+        r.year < year || (r.year === year && (month === 0 || r.month <= month));
+      if (!createdBeforeOrInMonth) return false;
+
+      if (r.endYear && r.endMonth) {
+        const endedBefore =
+          r.endYear < year || (r.endYear === year && month !== 0 && r.endMonth < month);
+        if (endedBefore) return false;
+      }
+
+      return true;
     } else {
       // Les revenus et remboursements ponctuels/variables sont stricts pour leur mois et année
       return r.month === month && r.year === year;
@@ -315,9 +323,33 @@ export async function addRevenue(
   return revenue;
 }
 
-export async function deleteRevenue(walletId: string, id: string) {
+export async function deleteRevenue(walletId: string, id: string, currentMonth?: number, currentYear?: number) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
-  await db.revenue.delete({ where: { id, walletId } });
+
+  const revenue = await db.revenue.findUnique({ where: { id, walletId } });
+  if (!revenue) return;
+
+  const targetM = currentMonth && currentMonth > 0 ? currentMonth : new Date().getMonth() + 1;
+  const targetY = currentYear || new Date().getFullYear();
+
+  const isFixed = revenue.type === "FIXED" || revenue.type === "REIMBURSEMENT_FIXED";
+  const createdInPast = revenue.year < targetY || (revenue.year === targetY && revenue.month < targetM);
+
+  if (isFixed && createdInPast) {
+    let prevM = targetM - 1;
+    let prevY = targetY;
+    if (prevM < 1) {
+      prevM = 12;
+      prevY -= 1;
+    }
+    await db.revenue.update({
+      where: { id, walletId },
+      data: { endMonth: prevM, endYear: prevY },
+    });
+  } else {
+    await db.revenue.delete({ where: { id, walletId } });
+  }
+
   revalidatePath("/");
 }
 
@@ -337,7 +369,14 @@ export async function getRecurringExpenses(walletId: string, month?: number, yea
   return all.filter((r) => {
     if (!r.startYear || !r.startMonth) return true;
     const isAfterStart = r.startYear < year || (r.startYear === year && (month === 0 || r.startMonth <= month));
-    return isAfterStart;
+    if (!isAfterStart) return false;
+
+    if (r.endYear && r.endMonth) {
+      const endedBefore = r.endYear < year || (r.endYear === year && month !== 0 && r.endMonth < month);
+      if (endedBefore) return false;
+    }
+
+    return true;
   });
 }
 
@@ -370,9 +409,35 @@ export async function addRecurringExpense(
   return expense;
 }
 
-export async function deleteRecurringExpense(walletId: string, id: string) {
+export async function deleteRecurringExpense(walletId: string, id: string, currentMonth?: number, currentYear?: number) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
-  await db.recurringExpense.delete({ where: { id, walletId } });
+
+  const item = await db.recurringExpense.findUnique({ where: { id, walletId } });
+  if (!item) return;
+
+  const targetM = currentMonth && currentMonth > 0 ? currentMonth : new Date().getMonth() + 1;
+  const targetY = currentYear || new Date().getFullYear();
+
+  const startM = item.startMonth || 1;
+  const startY = item.startYear || targetY;
+
+  const createdInPast = startY < targetY || (startY === targetY && startM < targetM);
+
+  if (createdInPast) {
+    let prevM = targetM - 1;
+    let prevY = targetY;
+    if (prevM < 1) {
+      prevM = 12;
+      prevY -= 1;
+    }
+    await db.recurringExpense.update({
+      where: { id, walletId },
+      data: { endMonth: prevM, endYear: prevY },
+    });
+  } else {
+    await db.recurringExpense.delete({ where: { id, walletId } });
+  }
+
   revalidatePath("/");
 }
 
@@ -458,9 +523,32 @@ export async function addInstallment(
   return installment;
 }
 
-export async function deleteInstallment(walletId: string, id: string) {
+export async function deleteInstallment(walletId: string, id: string, currentMonth?: number, currentYear?: number) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
-  await db.installmentPayment.delete({ where: { id, walletId } });
+
+  const item = await db.installmentPayment.findUnique({ where: { id, walletId } });
+  if (!item) return;
+
+  const targetM = currentMonth && currentMonth > 0 ? currentMonth : new Date().getMonth() + 1;
+  const targetY = currentYear || new Date().getFullYear();
+
+  const createdInPast = item.startYear < targetY || (item.startYear === targetY && item.startMonth < targetM);
+
+  if (createdInPast) {
+    let prevM = targetM - 1;
+    let prevY = targetY;
+    if (prevM < 1) {
+      prevM = 12;
+      prevY -= 1;
+    }
+    await db.installmentPayment.update({
+      where: { id, walletId },
+      data: { endMonth: prevM, endYear: prevY },
+    });
+  } else {
+    await db.installmentPayment.delete({ where: { id, walletId } });
+  }
+
   revalidatePath("/");
 }
 
@@ -873,13 +961,40 @@ export async function removeExpenseOverride(
 export async function updateRevenueGlobal(
   walletId: string,
   id: string,
-  data: { title?: string; amount?: number; type?: string }
+  data: { title?: string; amount?: number; type?: string; month?: number; year?: number }
 ) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
   const updated = await db.revenue.update({
     where: { id, walletId },
     data,
   });
+  revalidatePath("/");
+  return updated;
+}
+
+export async function moveRevenueMonth(
+  walletId: string,
+  id: string,
+  targetMonth: number,
+  targetYear: number
+) {
+  await requireWalletAccess(walletId, "FULL_ACCESS");
+  const revenue = await db.revenue.findUnique({
+    where: { id, walletId },
+  });
+
+  if (!revenue) {
+    throw new Error("Remboursement ou revenu introuvable.");
+  }
+
+  const updated = await db.revenue.update({
+    where: { id, walletId },
+    data: {
+      month: targetMonth,
+      year: targetYear,
+    },
+  });
+
   revalidatePath("/");
   return updated;
 }
