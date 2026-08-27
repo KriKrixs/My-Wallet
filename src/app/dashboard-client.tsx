@@ -889,7 +889,6 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const [editRecStartYear, setEditRecStartYear] = useState<number>(year);
 
   const [instTitle, setInstTitle] = useState("");
-  const [instTotal, setInstTotal] = useState<number | string>(500);
   const [instAmount, setInstAmount] = useState<number | string>(50);
   const [instCategory, setInstCategory] = useState("Paiement échelonné");
   const [instColor, setInstColor] = useState("violet");
@@ -973,7 +972,6 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     const targetM = month === 0 ? new Date().getMonth() + 1 : month;
     setInstTitle("");
     setInstAmount(50);
-    setInstTotal(500);
     setInstCategory("Paiement échelonné");
     setInstDay(10);
     setInstStartMonth(targetM);
@@ -1488,9 +1486,12 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
     }
 
     try {
+      const totalM = Math.max(1, (instEndYear - instStartYear) * 12 + (instEndMonth - instStartMonth) + 1);
+      const calculatedTotal = parseAmount(instAmount) * totalM;
+
       await addInstallment(activeWalletId, {
         title: instTitle,
-        totalAmount: instTotal !== "" ? parseAmount(instTotal) : undefined,
+        totalAmount: calculatedTotal,
         amount: parseAmount(instAmount),
         category: instCategory,
         color: instColor,

@@ -564,12 +564,31 @@ export async function updateInstallmentGlobal(
     startYear?: number;
     endMonth?: number;
     endYear?: number;
+    totalAmount?: number;
   }
 ) {
   await requireWalletAccess(walletId, "FULL_ACCESS");
+
+  const current = await db.installmentPayment.findUnique({ where: { id, walletId } });
+  if (!current) return;
+
+  const startM = data.startMonth ?? current.startMonth;
+  const startY = data.startYear ?? current.startYear;
+  const endM = data.endMonth ?? current.endMonth;
+  const endY = data.endYear ?? current.endYear;
+  const amt = data.amount ?? current.amount;
+
+  const totalM = Math.max(1, (endY - startY) * 12 + (endM - startM) + 1);
+  const calculatedTotal = amt * totalM;
+
+  const updatedData = {
+    ...data,
+    totalAmount: data.totalAmount ?? calculatedTotal,
+  };
+
   const updated = await db.installmentPayment.update({
     where: { id, walletId },
-    data,
+    data: updatedData,
   });
   revalidatePath("/");
   return updated;
@@ -1478,12 +1497,12 @@ export async function getDashboardData(walletId: string, month: number, year: nu
 
     remainingMonths = Math.min(totalMonths, Math.max(0, remainingMonths));
     const elapsedMonths = totalMonths - remainingMonths;
-    const paidAmount = elapsedMonths * amount;
+    const baseAmount = i.amount;
+    const calcTotalAmount = totalMonths * baseAmount;
+    const effectiveTotalAmount = (i.totalAmount && i.totalAmount >= calcTotalAmount) ? i.totalAmount : calcTotalAmount;
+    const paidAmount = elapsedMonths * baseAmount;
     
-    // Si totalAmount est spécifié et supérieur au montant payé, on déduit le payé du totalAmount, sinon remainingMonths * amount
-    const remainingAmount = (i.totalAmount && i.totalAmount > paidAmount)
-      ? Math.max(0, i.totalAmount - paidAmount)
-      : remainingMonths * amount;
+    const remainingAmount = remainingMonths === 0 ? 0 : Math.max(remainingMonths * baseAmount, effectiveTotalAmount - paidAmount);
 
     return {
       ...i,

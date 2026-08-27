@@ -2,6 +2,13 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.4.1] - 2026-08-27
+
+### 💳 Correction du Calcul du Montant Restant (Crédits & Paiements Fractionnés)
+* **Calcul Dynamique du Restant Dû (`remainingAmount`)** : Correction du calcul du montant restant à payer sur les crédits et paiements échelonnés. Le montant restant est désormais rigoureusement basé sur le nombre de mois restants jusqu'à l'échéance de fin (`remainingMonths * baseAmount` ou `totalAmount - paidAmount`).
+* **Suppression de la Valeur Factice (`instTotal`)** : Suppression de l'ancienne variable de formulaire statique qui envoyait un total par défaut de 500 € en base de données lors de la création d'échéanciers, ce qui faussait le reste à payer sur les crédits longs.
+* **Calcul Automatique à la Création & Modification** : Calcule automatiquement et avec précision le montant total (`totalAmount = mensualité * nombreDeMois`) lors de la création ou mise à jour globale d'un crédit ou d'un paiement fractionné.
+
 ## [v1.4.0] - 2026-08-24
 
 ### 🛡️ Préservation de l'Historique lors de la Suppression
