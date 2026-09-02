@@ -150,6 +150,33 @@ export const authOptions: NextAuthOptions = {
         throw new Error("Identifiant ou mot de passe incorrect.");
       },
     }),
+    // Provider Passkey (WebAuthn)
+    CredentialsProvider({
+      id: "passkey",
+      name: "Passkey",
+      credentials: {
+        credentialResponse: { label: "Credential Response", type: "text" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.credentialResponse) return null;
+        try {
+          const parsed = JSON.parse(credentials.credentialResponse);
+          const { verifyPasskeyAuthenticationServer } = await import("@/lib/actions/passkey");
+          const result = await verifyPasskeyAuthenticationServer(parsed);
+          if (result.success && result.user) {
+            return {
+              id: result.user.id,
+              name: result.user.name,
+              email: result.user.email,
+              role: result.user.role,
+            };
+          }
+          throw new Error(result.error || "Authentification Passkey échouée.");
+        } catch (err: any) {
+          throw new Error(err?.message || "Erreur de connexion par Passkey.");
+        }
+      },
+    }),
     // Mode développement local : connexion rapide sans serveur LDAP
     CredentialsProvider({
       id: "dev-login",

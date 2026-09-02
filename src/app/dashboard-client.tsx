@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { signOut } from "next-auth/react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import pkg from "../../package.json";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import {
   Container,
@@ -34,6 +35,7 @@ import {
   Radio,
   Checkbox,
   Autocomplete,
+  Alert,
 } from "@mantine/core";
 import {
   IconWallet,
@@ -72,7 +74,15 @@ import {
   IconCircleCheck,
   IconWifiOff,
   IconCalendarShare,
+  IconFingerprint,
 } from "@tabler/icons-react";
+import {
+  getUserPasskeys,
+  deletePasskey,
+  renamePasskey,
+  generatePasskeyRegistrationOptionsAction,
+  verifyPasskeyRegistrationAction,
+} from "@/lib/actions/passkey";
 import {
   getDashboardData,
   addRevenue,
@@ -747,9 +757,12 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   // STATS Summary Header KPIs
   const statsSummary = useMemo(() => {
     const totalRevenues = data?.summary?.totalRevenues || 0;
-    const totalExpenses = (data?.summary?.fixedExpenses || 0) + (data?.summary?.totalTransactions || 0);
-    const unspent = Math.max(0, totalRevenues - totalExpenses);
-    return { totalRevenues, totalExpenses, unspent };
+    const totalExpenses = data?.summary?.totalExpenses || ((data?.summary?.fixedExpenses || 0) + (data?.summary?.totalTransactions || 0));
+    const prevDeficit = data?.summary?.previousMonthDeficit || 0;
+    const prevSurplus = data?.summary?.previousMonthSurplus || 0;
+    const effectiveRevenues = totalRevenues - prevDeficit + prevSurplus;
+    const unspent = effectiveRevenues - totalExpenses;
+    return { totalRevenues, totalExpenses, unspent, effectiveRevenues, prevDeficit, prevSurplus };
   }, [data]);
 
   const wishlistCalc = useMemo(() => {
@@ -922,6 +935,76 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
   const [inviteRole, setInviteRole] = useState<PermissionLevel>("FULL_ACCESS");
 
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
+
+  // Passkey Management State
+  const [passkeyModalOpened, setPasskeyModalOpened] = useState(false);
+  const [userPasskeysList, setUserPasskeysList] = useState<any[]>([]);
+  const [newPasskeyName, setNewPasskeyName] = useState("");
+  const [passkeyLoadingState, setPasskeyLoadingState] = useState(false);
+  const [passkeyMsgState, setPasskeyMsgState] = useState<{ type: "error" | "success"; text: string } | null>(null);
+
+  const handleOpenPasskeyModal = async () => {
+    setPasskeyModalOpened(true);
+    setPasskeyMsgState(null);
+    setNewPasskeyName("");
+    try {
+      const keys = await getUserPasskeys();
+      setUserPasskeysList(keys);
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
+  const handleAddPasskey = async () => {
+    setPasskeyMsgState(null);
+    setPasskeyLoadingState(true);
+    try {
+      const options = await generatePasskeyRegistrationOptionsAction(newPasskeyName);
+      const { startRegistration } = await import("@simplewebauthn/browser");
+      const response = await startRegistration({ optionsJSON: options });
+      await verifyPasskeyRegistrationAction(response, newPasskeyName);
+      setPasskeyMsgState({ type: "success", text: "Clé de sécurité (Passkey) enregistrée avec succès !" });
+      setNewPasskeyName("");
+      const keys = await getUserPasskeys();
+      setUserPasskeysList(keys);
+    } catch (e: any) {
+      if (e?.name !== "NotAllowedError") {
+        setPasskeyMsgState({ type: "error", text: e?.message || "Erreur lors de la création de la Passkey." });
+      }
+    } finally {
+      setPasskeyLoadingState(false);
+    }
+  };
+
+  const [editingPasskeyId, setEditingPasskeyId] = useState<string | null>(null);
+  const [editingPasskeyName, setEditingPasskeyName] = useState("");
+
+  const handleStartRenamePasskey = (id: string, currentName: string) => {
+    setEditingPasskeyId(id);
+    setEditingPasskeyName(currentName);
+  };
+
+  const handleSaveRenamePasskey = async (id: string) => {
+    if (!editingPasskeyName.trim()) return;
+    try {
+      await renamePasskey(id, editingPasskeyName.trim());
+      setUserPasskeysList((prev) => prev.map((p) => (p.id === id ? { ...p, name: editingPasskeyName.trim() } : p)));
+      setEditingPasskeyId(null);
+      setPasskeyMsgState({ type: "success", text: "Nom de la Passkey mis à jour !" });
+    } catch (e: any) {
+      setPasskeyMsgState({ type: "error", text: e?.message || "Erreur lors de la modification du nom." });
+    }
+  };
+
+  const handleDeletePasskey = async (id: string) => {
+    try {
+      await deletePasskey(id);
+      setUserPasskeysList((prev) => prev.filter((p) => p.id !== id));
+      setPasskeyMsgState({ type: "success", text: "Passkey supprimée avec succès." });
+    } catch (e: any) {
+      setPasskeyMsgState({ type: "error", text: e?.message || "Erreur lors de la suppression." });
+    }
+  };
 
   useEffect(() => {
     const targetM = month === 0 ? new Date().getMonth() + 1 : month;
@@ -1849,7 +1932,7 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                     MyWallet
                   </Title>
                   <Badge variant="outline" color="teal" size="sm">
-                    v1.4.0
+                    v{pkg.version}
                   </Badge>
                 </Group>
                 <Text size="xs" c="dimmed">
@@ -1936,6 +2019,13 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                   style={{ width: 85 }}
                 />
               </Group>
+
+              {/* Passkey Management */}
+              <Tooltip label="Gérer mes Passkeys / Clés de Sécurité">
+                <ActionIcon variant="light" color="teal" size="lg" radius="md" onClick={handleOpenPasskeyModal}>
+                  <IconFingerprint size={20} />
+                </ActionIcon>
+              </Tooltip>
 
               {/* AD Logout */}
               <Tooltip label="Déconnexion (AD)">
@@ -2488,36 +2578,6 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                               </Group>
                             </Paper>
                           ))}
-                      </Stack>
-                    )}
-                  </Paper>
-
-                  {/* Recent Transactions List */}
-                  <Paper p="md" radius="md" style={{ backgroundColor: "#121829", border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <Title order={5} style={{ color: "#fff" }} mb="sm">
-                      Dernières Dépenses
-                    </Title>
-                    {!data?.transactions || data.transactions.length === 0 ? (
-                      <Text size="xs" c="dimmed">
-                        Aucune dépense saisie ce mois-ci.
-                      </Text>
-                    ) : (
-                      <Stack gap="xs">
-                        {data.transactions.slice(0, 5).map((t: any) => (
-                          <Group key={t.id} justify="space-between" wrap="nowrap">
-                            <div>
-                              <Text size="sm" fw={600} style={{ color: "#fff" }}>
-                                {t.title}
-                              </Text>
-                              <Text size="xs" c="dimmed">
-                                Jour {t.day} • {t.category}
-                              </Text>
-                            </div>
-                            <Text size="sm" fw={700} c={getCategoryTextColor(t.category)}>
-                              -{t.amount.toFixed(2)} €
-                            </Text>
-                          </Group>
-                        ))}
                       </Stack>
                     )}
                   </Paper>
@@ -3503,11 +3563,21 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                 <Grid.Col span={{ base: 12, sm: 4 }}>
                   <Paper p="md" radius="md" style={{ backgroundColor: "#161d30", border: "1px solid rgba(255,255,255,0.06)" }}>
                     <Text size="xs" c="dimmed" fw={700}>SOLDE DISPONIBLE / ÉPARGNE</Text>
-                    <Text size="xl" fw={800} c="teal.4">
-                      +{statsSummary.unspent.toFixed(2)} €
-                      <Text span size="xs" c="dimmed" ml={6}>
-                        ({statsSummary.totalRevenues > 0 ? ((statsSummary.unspent / statsSummary.totalRevenues) * 100).toFixed(1) : 0}%)
-                      </Text>
+                    <Text size="xl" fw={800} c={statsSummary.unspent >= 0 ? "teal.4" : "red.4"}>
+                      {statsSummary.unspent >= 0 ? "+" : ""}{statsSummary.unspent.toFixed(2)} €
+                      {statsSummary.prevDeficit > 0 ? (
+                        <Text span size="xs" c="orange.4" ml={6}>
+                          (-{statsSummary.prevDeficit.toFixed(2)} €) - Déficit du M-1
+                        </Text>
+                      ) : statsSummary.prevSurplus > 0 ? (
+                        <Text span size="xs" c="teal.3" ml={6}>
+                          (+{statsSummary.prevSurplus.toFixed(2)} €) - Report du M-1
+                        </Text>
+                      ) : (
+                        <Text span size="xs" c="dimmed" ml={6}>
+                          ({statsSummary.effectiveRevenues > 0 ? ((statsSummary.unspent / statsSummary.effectiveRevenues) * 100).toFixed(1) : 0}%)
+                        </Text>
+                      )}
                     </Text>
                   </Paper>
                 </Grid.Col>
@@ -4597,6 +4667,117 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
           <Button color="teal" fullWidth onClick={handleSaveEnvelope}>
             Enregistrer l'Enveloppe
           </Button>
+        </Stack>
+      </Modal>
+
+      {/* Modal Gestion des Passkeys */}
+      <Modal
+        opened={passkeyModalOpened}
+        onClose={() => setPasskeyModalOpened(false)}
+        title="Clés de Sécurité (Passkeys)"
+        centered
+        size="xl"
+        closeOnClickOutside={false}
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Les Passkeys vous permettent de vous connecter de manière sécurisée et rapide avec votre empreinte digitale (Touch ID), votre visage (Face ID) ou votre téléphone.
+          </Text>
+
+          {passkeyMsgState && (
+            <Alert
+              icon={passkeyMsgState.type === "error" ? <IconAlertCircle size={16} /> : <IconCheck size={16} />}
+              color={passkeyMsgState.type === "error" ? "red" : "teal"}
+              variant="light"
+            >
+              {passkeyMsgState.text}
+            </Alert>
+          )}
+
+          <Paper p="sm" radius="md" style={{ backgroundColor: "#182036" }}>
+            <Text size="sm" fw={700} mb="xs">
+              Enregistrer une nouvelle Passkey
+            </Text>
+            <Group gap="xs">
+              <TextInput
+                placeholder="ex: Mon iPhone 15, Touch ID Mac, YubiKey..."
+                value={newPasskeyName}
+                onChange={(e) => setNewPasskeyName(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                color="teal"
+                leftSection={<IconFingerprint size={18} />}
+                loading={passkeyLoadingState}
+                onClick={handleAddPasskey}
+              >
+                Ajouter
+              </Button>
+            </Group>
+          </Paper>
+
+          <Text size="sm" fw={700} mt="xs">
+            Mes Passkeys Enregistrées ({userPasskeysList.length})
+          </Text>
+
+          {userPasskeysList.length === 0 ? (
+            <Text size="xs" c="dimmed">
+              Aucune Passkey enregistrée pour le moment.
+            </Text>
+          ) : (
+            <Table style={{ backgroundColor: "#121829", borderRadius: 8 }}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Nom de la Clé</Table.Th>
+                  <Table.Th>Date d'Ajout</Table.Th>
+                  <Table.Th style={{ textAlign: "right" }}>Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {userPasskeysList.map((p: any) => (
+                  <Table.Tr key={p.id}>
+                    <Table.Td fw={600}>
+                      {editingPasskeyId === p.id ? (
+                        <Group gap={6} wrap="nowrap">
+                          <IconFingerprint size={16} color="#20c997" />
+                          <TextInput
+                            size="xs"
+                            value={editingPasskeyName}
+                            onChange={(e) => setEditingPasskeyName(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSaveRenamePasskey(p.id)}
+                            style={{ flex: 1, minWidth: 200 }}
+                            autoFocus
+                          />
+                          <ActionIcon color="teal" variant="subtle" size="sm" onClick={() => handleSaveRenamePasskey(p.id)}>
+                            <IconCheck size={16} />
+                          </ActionIcon>
+                          <ActionIcon color="gray" variant="subtle" size="sm" onClick={() => setEditingPasskeyId(null)}>
+                            <IconX size={16} />
+                          </ActionIcon>
+                        </Group>
+                      ) : (
+                        <Group gap={6}>
+                          <IconFingerprint size={16} color="#20c997" />
+                          <Text size="sm" c="white">{p.name || "Ma Clé de Sécurité"}</Text>
+                          <ActionIcon color="blue" variant="subtle" size="xs" title="Renommer" onClick={() => handleStartRenamePasskey(p.id, p.name)}>
+                            <IconPencil size={14} />
+                          </ActionIcon>
+                        </Group>
+                      )}
+                    </Table.Td>
+                    <Table.Td style={{ color: "rgba(255,255,255,0.6)" }}>
+                      {new Date(p.createdAt).toLocaleDateString("fr-FR")}
+                    </Table.Td>
+                    <Table.Td style={{ textAlign: "right" }}>
+                      <ActionIcon color="red" variant="subtle" title="Supprimer" onClick={() => handleDeletePasskey(p.id)}>
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
         </Stack>
       </Modal>
 

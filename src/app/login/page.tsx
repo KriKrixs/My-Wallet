@@ -31,9 +31,11 @@ import {
   IconUserCheck,
   IconUserPlus,
   IconCheck,
+  IconFingerprint,
 } from "@tabler/icons-react";
 import { checkLdapEnabled } from "@/lib/actions/auth-config";
 import { registerLocalUser } from "@/lib/actions/auth-local";
+import { generatePasskeyAuthenticationOptionsAction } from "@/lib/actions/passkey";
 
 const mockUsers = [
   { label: "Kylian (Propriétaire)", value: "kylian@example.com", name: "Kylian" },
@@ -67,6 +69,7 @@ export default function LoginPage() {
   const [selectedMockUser, setSelectedMockUser] = useState("kylian@example.com");
 
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   useEffect(() => {
     checkLdapEnabled().then((enabled) => setIsLdapEnabled(enabled));
@@ -113,6 +116,40 @@ export default function LoginPage() {
     }
   };
 
+  const handlePasskeyLogin = async () => {
+    setAuthError(null);
+    setAuthSuccess(null);
+    setPasskeyLoading(true);
+
+    try {
+      const options = await generatePasskeyAuthenticationOptionsAction(username.trim() || undefined);
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+      const response = await startAuthentication({ optionsJSON: options });
+
+      const res = await signIn("passkey", {
+        credentialResponse: JSON.stringify(response),
+        redirect: false,
+      });
+
+      if (res?.error) {
+        let msg = "Connexion par Passkey refusée ou non reconnue.";
+        try {
+          const decoded = decodeURIComponent(res.error);
+          if (decoded && decoded !== "CredentialsSignin") msg = decoded;
+        } catch (_) {}
+        setAuthError(msg);
+      } else if (res?.ok) {
+        window.location.href = "/";
+      }
+    } catch (err: any) {
+      if (err?.name !== "NotAllowedError") {
+        setAuthError(err?.message || "Erreur lors de la connexion par Passkey.");
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -156,7 +193,7 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setLoading(false);
-      setAuthError(err?.message || "Une erreur est survenue lors de l'création du compte.");
+      setAuthError(err?.message || "Une erreur est survenue lors de la création du compte.");
     }
   };
 
@@ -265,58 +302,75 @@ export default function LoginPage() {
                 </Alert>
               )}
 
-              {/* ── FORMULAIRE DE CONNEXION (LDAP OU LOCAL) ── */}
+              {/* ── FORMULAIRE DE CONNEXION (LDAP, LOCAL OU PASSKEY) ── */}
               {mode === "LOGIN" && (
-                <form onSubmit={handleLogin}>
-                  <Stack gap="md">
-                    <TextInput
-                      id="login-username"
-                      label="Identifiant ou E-mail"
-                      placeholder="votre_compte ou email@exemple.com"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      leftSection={<IconServer size={16} />}
-                      size="sm"
-                      radius="md"
-                      styles={{
-                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
-                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
-                      }}
-                      required
-                    />
+                <Stack gap="md">
+                  <form onSubmit={handleLogin}>
+                    <Stack gap="md">
+                      <TextInput
+                        id="login-username"
+                        label="Identifiant ou E-mail"
+                        placeholder="votre_compte ou email@exemple.com"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        leftSection={<IconServer size={16} />}
+                        size="sm"
+                        radius="md"
+                        styles={{
+                          input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                          label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                        }}
+                        required
+                      />
 
-                    <PasswordInput
-                      id="login-password"
-                      label="Mot de passe"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      size="sm"
-                      radius="md"
-                      styles={{
-                        input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
-                        label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
-                      }}
-                      required
-                    />
+                      <PasswordInput
+                        id="login-password"
+                        label="Mot de passe"
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        size="sm"
+                        radius="md"
+                        styles={{
+                          input: { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+                          label: { color: "rgba(255,255,255,0.7)", marginBottom: 4 },
+                        }}
+                        required
+                      />
 
-                    <Button
-                      id="login-btn"
-                      type="submit"
-                      size="md"
-                      fullWidth
-                      loading={loading}
-                      variant="gradient"
-                      gradient={{ from: "teal.7", to: "cyan.5", deg: 135 }}
-                      leftSection={<IconLogin size={18} />}
-                      radius="md"
-                      mt={4}
-                      style={{ fontWeight: 600 }}
-                    >
-                      Se connecter
-                    </Button>
-                  </Stack>
-                </form>
+                      <Button
+                        id="login-btn"
+                        type="submit"
+                        size="md"
+                        fullWidth
+                        loading={loading}
+                        variant="gradient"
+                        gradient={{ from: "teal.7", to: "cyan.5", deg: 135 }}
+                        leftSection={<IconLogin size={18} />}
+                        radius="md"
+                        mt={4}
+                        style={{ fontWeight: 600 }}
+                      >
+                        Se connecter
+                      </Button>
+                    </Stack>
+                  </form>
+
+                  <Divider label="OU CONNEXION PAR PASSKEY" labelPosition="center" color="rgba(255,255,255,0.1)" />
+
+                  <Button
+                    variant="outline"
+                    color="teal"
+                    size="sm"
+                    radius="md"
+                    fullWidth
+                    leftSection={<IconFingerprint size={18} />}
+                    loading={passkeyLoading}
+                    onClick={handlePasskeyLogin}
+                  >
+                    Connexion par Passkey / Biométrie
+                  </Button>
+                </Stack>
               )}
 
               {/* ── FORMULAIRE D'INSCRIPTION COMPTE LOCAL ── */}

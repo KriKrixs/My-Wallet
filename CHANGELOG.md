@@ -2,6 +2,28 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.5.0] - 2026-09-02
+
+### 🔑 Connexion & Authentification par Passkey (WebAuthn / Biométrie)
+* **Authentification sans Mot de Passe (Passkey / WebAuthn)** : Support complet des Passkeys FIDO2 / WebAuthn (Touch ID, Face ID, YubiKey, clés de sécurité matérielles et smartphones).
+* **Bouton & Flux de Connexion Direct** : Intégration d'un bouton de connexion dédié *Passkey / Biométrie* sur la page `/login` pour une authentification instantanée sans mot de passe.
+* **Délai d'Enregistrement de 10 Minutes** : Extension du timeout WebAuthn et des jetons de challenge pour permettre aux coffres-forts (Bitwarden, 1Password, etc.) le temps nécessaire de créer l'entrée sans être déconnecté.
+* **Gestion des Clés de Sécurité (Dashboard)** : Modale de gestion des Passkeys accessible depuis le header pour enregistrer de nouvelles clés de sécurité (Touch ID, Face ID, etc.) et révoquer les clés existantes.
+
+## [v1.4.3] - 2026-08-31
+
+### 📊 Prise en Compte du Déficit/Surplus du Mois Précédent dans les Statistiques
+* **Diction et Calcul Précis (`effectiveRevenues`)** : Le KPI *Solde disponible / Épargne* dans l'onglet Statistiques intègre désormais rigoureusement le déficit renseigné ou le report du mois précédent (`totalRevenues - previousMonthDeficit + previousMonthSurplus - totalExpenses`).
+* **Formatage sur la Même Ligne (`(-X€) - Déficit du M-1`)** : Formatage concis et épuré affiché sur la même ligne que le montant du solde disponible en orange `(-X.XX €) - Déficit du M-1` (ou en vert `(+X.XX €) - Report du M-1`).
+
+## [v1.4.2] - 2026-08-30
+
+### 🏷️ Badge de Version Dynamique dans le Header
+* **Lecture Dynamique (`pkg.version`)** : Le badge de version dans le header lit désormais automatiquement le numéro de version depuis `package.json` (`v{pkg.version}`), garantissant la synchronisation de l'affichage lors de chaque nouvelle version.
+
+### 🧹 Épuration de la Vue d'Ensemble
+* **Suppression du Panneau "Dernières Dépenses"** : Retrait du panneau de la liste restreinte des dernières dépenses quotidiennes dans l'onglet *Vue d'ensemble* afin d'alléger la vue et d'éviter les doublons avec l'onglet dédié aux transactions.
+
 ## [v1.4.1] - 2026-08-27
 
 ### 💳 Correction du Calcul du Montant Restant (Crédits & Paiements Fractionnés)

@@ -1,6 +1,6 @@
 {
   "name": "my-wallet",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
@@ -16,6 +16,8 @@
     "@mantine/hooks": "^9.4.1",
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.8.0",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.0",
     "@tabler/icons-react": "^3.44.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
@@ -25,6 +27,7 @@
     "next-auth": "^4.24.14",
     "pg": "^8.22.0",
     "prisma": "^7.8.0",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.9.2"
