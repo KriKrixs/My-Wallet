@@ -2,6 +2,12 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.5.1] - 2026-09-03
+
+### 🔄 Correction de l'Affichage des Virements Inter-Portefeuilles
+* **Propriétaire du Portefeuille Source dans le Pointage** : Le libellé des virements entrants dans le pointage bancaire `(Virement de ...)` affiche désormais le nom du propriétaire du portefeuille source émetteur au lieu du créateur de la transaction.
+* **Refonte du Tableau des Virements Reçus** : Organisation en colonnes claires (*Motif*, *Portefeuille*, *Propriétaire* affichant uniquement le prénom, *Montant*).
+
 ## [v1.5.0] - 2026-09-02
 
 ### 🔑 Connexion & Authentification par Passkey (WebAuthn / Biométrie)

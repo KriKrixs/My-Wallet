@@ -1167,7 +1167,16 @@ async function calculateWalletMonthlyNet(walletId: string, month: number, year: 
     db.walletTransfer.findMany({
       where: { targetWalletId: walletId },
       include: {
-        sourceWallet: { select: { id: true, name: true } },
+        sourceWallet: {
+          select: {
+            id: true,
+            name: true,
+            users: {
+              where: { role: "OWNER" },
+              include: { user: { select: { name: true, email: true } } },
+            },
+          },
+        },
         createdBy: { select: { name: true, email: true } },
       },
     }),
@@ -1376,7 +1385,16 @@ export async function getDashboardData(walletId: string, month: number, year: nu
     db.walletTransfer.findMany({
       where: { targetWalletId: walletId },
       include: {
-        sourceWallet: { select: { id: true, name: true } },
+        sourceWallet: {
+          select: {
+            id: true,
+            name: true,
+            users: {
+              where: { role: "OWNER" },
+              include: { user: { select: { name: true, email: true } } },
+            },
+          },
+        },
         createdBy: { select: { name: true, email: true } },
       },
     }),
@@ -1583,9 +1601,15 @@ export async function getDashboardData(walletId: string, month: number, year: nu
         effectiveAmount = Math.round((t.percentage / 100) * sBase * 100) / 100;
       }
 
+      const ownerUser = (t.sourceWallet as any)?.users?.[0]?.user;
+      const senderName = ownerUser?.name || ownerUser?.email || t.createdBy?.name || t.createdBy?.email;
+
       return {
         ...t,
         amount: effectiveAmount,
+        senderName,
+        sourceWalletName: t.sourceWallet?.name,
+        processed: processed.some((p) => p.paymentId === t.id && p.type === "TRANSFER"),
       };
     })
   );
@@ -1594,18 +1618,18 @@ export async function getDashboardData(walletId: string, month: number, year: nu
   const transferRevenues = transfersReceivedWithProcessed.map((t) => ({
     id: `transfer-${t.id}`,
     walletId,
-    title: `${t.title} (Virement de ${t.createdBy.name || t.createdBy.email})`,
+    title: `${t.title} (${t.senderName})`,
     amount: t.amount,
     type: "VARIABLE",
     isTransferIn: true,
-    senderName: t.createdBy.name || t.createdBy.email,
-    sourceWalletName: t.sourceWallet.name,
+    senderName: t.senderName,
+    sourceWalletName: t.sourceWalletName,
     month: t.month,
     year: t.year,
     date: t.createdAt,
     originalAmount: t.amount,
     hasOverride: false,
-    processed: processed.some((p) => p.paymentId === t.id && p.type === "TRANSFER"),
+    processed: t.processed,
   }));
 
   const standardRevenues = [

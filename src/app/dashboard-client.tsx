@@ -3500,31 +3500,36 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                           <Table highlightOnHover>
                             <Table.Thead>
                               <Table.Tr>
+                                <Table.Th>Propriétaire</Table.Th>
                                 <Table.Th>Motif</Table.Th>
-                                <Table.Th>Émetteur</Table.Th>
-                                <Table.Th>Origine</Table.Th>
+                                <Table.Th>Portefeuille</Table.Th>
                                 <Table.Th>Montant</Table.Th>
                               </Table.Tr>
                             </Table.Thead>
                             <Table.Tbody>
-                              {data.transfersReceived.map((t: any) => (
-                                <Table.Tr key={t.id}>
-                                  <Table.Td fw={600}>{t.title}</Table.Td>
-                                  <Table.Td>
-                                    <Badge color="teal" variant="filled" size="sm">
-                                      {t.senderName}
-                                    </Badge>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Badge color="blue" variant="light" size="sm">
-                                      {t.sourceWalletName}
-                                    </Badge>
-                                  </Table.Td>
-                                  <Table.Td fw={700} c="teal.4">
-                                    +{t.amount.toFixed(2)} €
-                                  </Table.Td>
-                                </Table.Tr>
-                              ))}
+                              {data.transfersReceived.map((t: any) => {
+                                const rawName = t.senderName || t.createdBy?.name || t.createdBy?.email || "Inconnu";
+                                const firstName = rawName.split(" ")[0] || rawName;
+                                return (
+                                  <Table.Tr key={t.id}>
+                                    <Table.Td>
+                                      <Badge color="teal" variant="filled" size="sm">
+                                        {firstName}
+                                      </Badge>
+                                    </Table.Td>
+                                    <Table.Td fw={600}>{t.title}</Table.Td>
+                                    <Table.Td>
+                                      <Badge color="cyan" variant="light" size="sm">
+                                        {t.sourceWallet?.name || t.sourceWalletName}
+                                      </Badge>
+                                    </Table.Td>
+
+                                    <Table.Td fw={700} c="teal.4">
+                                      +{t.amount.toFixed(2)} €
+                                    </Table.Td>
+                                  </Table.Tr>
+                                );
+                              })}
                             </Table.Tbody>
                           </Table>
                         )}
