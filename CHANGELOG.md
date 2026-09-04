@@ -2,6 +2,14 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.5.2] - 2026-09-04
+
+### 🏥 Endpoint de Santé pour Conteneur Docker (`/health`)
+* **Endpoint `/health` & `/api/health`** : Création d'une route de vérification de santé pour le conteneur Docker.
+* **Vérification PostgreSQL** : Exécution d'une requête test `SELECT 1` pour valider la connectivité de la base de données.
+* **Vérification Active Directory / LDAP** : Test de joignabilité réseau socket (TCP/TLS) vers le serveur AD (`LDAP_URL`) uniquement lorsque `NEXT_PUBLIC_LDAP_ENABLED=true` ou `LDAP_ENABLED=true`.
+* **Exclusion Middleware & Codes HTTP** : Retourne un statut `200 OK` si tous les composants sont sains, et `503 Service Unavailable` en cas de défaillance. Exclu de la protection NextAuth dans le middleware pour permettre les healthchecks Docker.
+
 ## [v1.5.1] - 2026-09-03
 
 ### 🔄 Correction de l'Affichage des Virements Inter-Portefeuilles
