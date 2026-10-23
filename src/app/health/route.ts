@@ -99,11 +99,52 @@ export async function GET() {
     }
   }
 
+  // 3. Vérification OIDC / Authentik (si activé)
+  const modeEnv = (process.env.AUTH_MODE || process.env.NEXT_PUBLIC_AUTH_MODE || "").trim().toUpperCase();
+  const isOidcEnabled =
+    modeEnv === "OIDC" ||
+    process.env.NEXT_PUBLIC_OIDC_ENABLED === "true" ||
+    process.env.OIDC_ENABLED === "true" ||
+    Boolean(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID);
+
+  let oidcStatus: { enabled: boolean; status: "ok" | "error" | "disabled"; error?: string } = {
+    enabled: false,
+    status: "disabled",
+  };
+
+  if (isOidcEnabled) {
+    const oidcIssuer = process.env.OIDC_ISSUER;
+    if (!oidcIssuer) {
+      isHealthy = false;
+      oidcStatus = {
+        enabled: true,
+        status: "error",
+        error: "OIDC est activé mais OIDC_ISSUER n'est pas renseigné.",
+      };
+    } else {
+      const oidcCheck = await checkLdapReachability(oidcIssuer);
+      if (!oidcCheck.ok) {
+        isHealthy = false;
+        oidcStatus = {
+          enabled: true,
+          status: "error",
+          error: oidcCheck.error,
+        };
+      } else {
+        oidcStatus = {
+          enabled: true,
+          status: "ok",
+        };
+      }
+    }
+  }
+
   const responsePayload = {
     status: isHealthy ? "ok" : "error",
     timestamp,
     database: dbStatus,
     ldap: ldapStatus,
+    oidc: oidcStatus,
   };
 
   return NextResponse.json(responsePayload, {

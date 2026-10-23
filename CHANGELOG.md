@@ -2,6 +2,22 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.6.0] - 2026-09-09
+
+### 🛡️ Support Authentification OIDC / Authentik & Choix du Mode d'Authentification (`AUTH_MODE`)
+* **Support SSO OpenID Connect (Authentik, Keycloak, etc.)** : Intégration d'un provider OIDC NextAuth réactif et configurable via `AUTH_MODE=OIDC` (ou `NEXT_PUBLIC_OIDC_ENABLED=true`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_ISSUER` et `OIDC_CLIENT_NAME`.
+* **Liaison des Comptes & Table `Account`** : Ajout du modèle Prisma `Account` et de la migration PostgreSQL associés. Tout compte connecté via OIDC (Authentik) est automatiquement rattaché au compte local existant partageant le même e-mail. Le mot de passe local est préservé en méthode de secours.
+* **Connexion Automatique SSO (Zero-Click)** : Lors de la navigation vers la page de connexion, si le mode OIDC est actif et que l'utilisateur ne s'est pas déconnecté manuellement, l'application déclenche automatiquement la redirection SSO vers Authentik.
+* **Déconnexion Débrayable (`?logout=true`)** : Un clic sur le bouton Déconnexion redirige vers `/login?logout=true`, ce qui suspend temporairement la redirection automatique et affiche la mire de connexion complète.
+* **Attribution Automatique du Rôle Admin (Groupes OIDC)** : Promotion automatique au rôle `ADMIN` si l'utilisateur fait partie d'un groupe admin OIDC configuré (`OIDC_ADMIN_GROUP`).
+* **Synchronisation Automatique du Nom** : Mise à jour automatique du nom d'affichage dans la base PostgreSQL si celui-ci a changé dans Authentik / OIDC lors d'une connexion.
+* **Administration & Édition des Utilisateurs (Interface Admin)** :
+  * Modale grand format (largeur 50%) réservée aux administrateurs.
+  * Édition complète des utilisateurs (nom d'affichage, adresse e-mail, définition / réinitialisation d'un mot de passe local).
+  * Gestion des rôles (bascule `USER` <-> `ADMIN`).
+  * Suppression définitive de comptes avec nettoyage automatique des portefeuilles orphelins.
+* **Vérification de Santé `/health`** : Prise en compte du statut du serveur OIDC (`oidcStatus`) dans le rapport de santé de l'application.
+
 ## [v1.5.2] - 2026-09-04
 
 ### 🏥 Endpoint de Santé pour Conteneur Docker (`/health`)

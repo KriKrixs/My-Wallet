@@ -33,7 +33,7 @@ import {
   IconCheck,
   IconFingerprint,
 } from "@tabler/icons-react";
-import { checkLdapEnabled } from "@/lib/actions/auth-config";
+import { checkLdapEnabled, getAuthModeServerAction } from "@/lib/actions/auth-config";
 import { registerLocalUser } from "@/lib/actions/auth-local";
 import { generatePasskeyAuthenticationOptionsAction } from "@/lib/actions/passkey";
 
@@ -45,6 +45,15 @@ const mockUsers = [
 
 export default function LoginPage() {
   const [isLdapEnabled, setIsLdapEnabled] = useState<boolean | null>(null);
+  const [authConfig, setAuthConfig] = useState<{
+    mode: "OIDC" | "LDAP" | "LOCAL";
+    oidcClientName: string;
+    isOidcEnabled: boolean;
+    isLdapEnabled: boolean;
+  } | null>(null);
+  const [oidcLoading, setOidcLoading] = useState(false);
+  const [oidcAutoRedirecting, setOidcAutoRedirecting] = useState(false);
+
   const [mode, setMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
 
   const isDevLoginEnabled =
@@ -72,7 +81,21 @@ export default function LoginPage() {
   const [passkeyLoading, setPasskeyLoading] = useState(false);
 
   useEffect(() => {
-    checkLdapEnabled().then((enabled) => setIsLdapEnabled(enabled));
+    getAuthModeServerAction().then((cfg) => {
+      setAuthConfig(cfg);
+      setIsLdapEnabled(cfg.isLdapEnabled);
+
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const isLogout = urlParams.get("logout") === "true";
+
+        // Auto SSO Redirect si OIDC est le mode actif et pas de déconnexion manuelle
+        if (cfg.isOidcEnabled && (cfg.mode === "OIDC" || !isLogout) && !isLogout) {
+          setOidcAutoRedirecting(true);
+          signIn("authentik", { callbackUrl: "/" });
+        }
+      }
+    });
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -302,9 +325,43 @@ export default function LoginPage() {
                 </Alert>
               )}
 
-              {/* ── FORMULAIRE DE CONNEXION (LDAP, LOCAL OU PASSKEY) ── */}
-              {mode === "LOGIN" && (
+              {/* ── AUTO REDIRECT OIDC LOADING ── */}
+              {oidcAutoRedirecting && (
+                <Paper p="lg" radius="md" style={{ backgroundColor: "#182036", textAlign: "center" }}>
+                  <Loader color="cyan" size="md" mx="auto" mb="sm" />
+                  <Text size="sm" c="white" fw={600}>
+                    Redirection vers {authConfig?.oidcClientName || "Authentik"}...
+                  </Text>
+                  <Text size="xs" c="dimmed" mt={4}>
+                    Connexion automatique en cours.
+                  </Text>
+                </Paper>
+              )}
+
+              {/* ── FORMULAIRE DE CONNEXION (OIDC, LDAP, LOCAL OU PASSKEY) ── */}
+              {mode === "LOGIN" && !oidcAutoRedirecting && (
                 <Stack gap="md">
+                  {authConfig?.isOidcEnabled && (
+                    <>
+                      <Button
+                        size="md"
+                        fullWidth
+                        variant="gradient"
+                        gradient={{ from: "cyan.6", to: "blue.6", deg: 135 }}
+                        leftSection={<IconShieldLock size={20} />}
+                        loading={oidcLoading}
+                        onClick={() => {
+                          setOidcLoading(true);
+                          signIn("authentik", { callbackUrl: "/" });
+                        }}
+                      >
+                        Se connecter avec {authConfig.oidcClientName || "Authentik"}
+                      </Button>
+
+                      <Divider label="OU COMPTE LOCAL / PASSKEY" labelPosition="center" color="rgba(255,255,255,0.1)" />
+                    </>
+                  )}
+
                   <form onSubmit={handleLogin}>
                     <Stack gap="md">
                       <TextInput

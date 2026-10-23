@@ -11,6 +11,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-mywallet}
     ports:
       - "5432:5432"
+    networks:
+      - wesav2-common
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -26,6 +28,8 @@ services:
     container_name: my-wallet
     ports:
       - "3000:3000"
+    networks:
+      - wesav2-common
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,3 +52,7 @@ services:
 volumes:
   postgres-data:
     driver: local
+
+networks:
+  wesav2-common:
+    external: true

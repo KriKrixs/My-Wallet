@@ -16,6 +16,7 @@ import {
   Select,
   NumberInput,
   TextInput,
+  PasswordInput,
   Badge,
   ActionIcon,
   Modal,
@@ -36,6 +37,8 @@ import {
   Checkbox,
   Autocomplete,
   Alert,
+  Center,
+  Loader,
 } from "@mantine/core";
 import {
   IconWallet,
@@ -75,6 +78,9 @@ import {
   IconWifiOff,
   IconCalendarShare,
   IconFingerprint,
+  IconUser,
+  IconShieldCheck,
+  IconCrown,
 } from "@tabler/icons-react";
 import {
   getUserPasskeys,
@@ -83,6 +89,13 @@ import {
   generatePasskeyRegistrationOptionsAction,
   verifyPasskeyRegistrationAction,
 } from "@/lib/actions/passkey";
+import {
+  getAllUsersForAdmin,
+  updateUserRoleAdmin,
+  updateUserByAdmin,
+  updateOwnProfile,
+  deleteUserByAdmin,
+} from "@/lib/actions/user-management";
 import {
   getDashboardData,
   addRevenue,
@@ -1003,6 +1016,131 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
       setPasskeyMsgState({ type: "success", text: "Passkey supprimée avec succès." });
     } catch (e: any) {
       setPasskeyMsgState({ type: "error", text: e?.message || "Erreur lors de la suppression." });
+    }
+  };
+
+  // Profile Modal State
+  const [profileModalOpened, setProfileModalOpened] = useState(false);
+  const [profileName, setProfileName] = useState(user?.name || "");
+  const [profileEmail, setProfileEmail] = useState(user?.email || "");
+  const [profileLoadingState, setProfileLoadingState] = useState(false);
+  const [profileMsgState, setProfileMsgState] = useState<{ type: "error" | "success"; text: string } | null>(null);
+
+  const handleOpenProfileModal = () => {
+    setProfileName(user?.name || "");
+    setProfileEmail(user?.email || "");
+    setProfileMsgState(null);
+    setProfileModalOpened(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileMsgState(null);
+    setProfileLoadingState(true);
+    try {
+      await updateOwnProfile({ name: profileName, email: profileEmail });
+      setProfileMsgState({ type: "success", text: "Profil mis à jour avec succès !" });
+      loadData();
+    } catch (e: any) {
+      setProfileMsgState({ type: "error", text: e?.message || "Erreur lors de la mise à jour du profil." });
+    } finally {
+      setProfileLoadingState(false);
+    }
+  };
+
+  // Admin User Management State
+  const [adminModalOpened, setAdminModalOpened] = useState(false);
+  const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
+  const [adminSearchQuery, setAdminSearchQuery] = useState("");
+  const [adminLoadingState, setAdminLoadingState] = useState(false);
+  const [adminMsgState, setAdminMsgState] = useState<{ type: "error" | "success"; text: string } | null>(null);
+
+  const handleOpenAdminModal = async () => {
+    setAdminModalOpened(true);
+    setAdminMsgState(null);
+    setAdminSearchQuery("");
+    setAdminLoadingState(true);
+    try {
+      const users = await getAllUsersForAdmin();
+      setAdminUsersList(users);
+    } catch (e: any) {
+      setAdminMsgState({ type: "error", text: e?.message || "Erreur lors du chargement des utilisateurs." });
+    } finally {
+      setAdminLoadingState(false);
+    }
+  };
+
+  const handleToggleUserRole = async (targetUserId: string, currentRole: string) => {
+    const newRole = currentRole === "ADMIN" ? "USER" : "ADMIN";
+    try {
+      await updateUserRoleAdmin(targetUserId, newRole);
+      setAdminUsersList((prev) => prev.map((u) => (u.id === targetUserId ? { ...u, role: newRole } : u)));
+      setAdminMsgState({ type: "success", text: `Rôle mis à jour (${newRole})` });
+    } catch (e: any) {
+      setAdminMsgState({ type: "error", text: e?.message || "Erreur lors de la modification du rôle." });
+    }
+  };
+
+  // Admin User Edit State
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserEmail, setEditUserEmail] = useState("");
+  const [editUserPassword, setEditUserPassword] = useState("");
+  const [editUserLoading, setEditUserLoading] = useState(false);
+  const [editUserError, setEditUserError] = useState<string | null>(null);
+
+  const handleStartEditUser = (u: any) => {
+    setEditingUser(u);
+    setEditUserName(u.name || "");
+    setEditUserEmail(u.email || "");
+    setEditUserPassword("");
+    setEditUserError(null);
+  };
+
+  const handleSaveUserByAdmin = async () => {
+    if (!editingUser) return;
+    setEditUserLoading(true);
+    setEditUserError(null);
+    try {
+      await updateUserByAdmin(editingUser.id, {
+        name: editUserName,
+        email: editUserEmail,
+        password: editUserPassword || undefined,
+      });
+      setAdminUsersList((prev) =>
+        prev.map((u) =>
+          u.id === editingUser.id
+            ? {
+                ...u,
+                name: editUserName.trim(),
+                email: editUserEmail.trim().toLowerCase(),
+                hasPassword: Boolean(editUserPassword || u.hasPassword),
+              }
+            : u
+        )
+      );
+      setAdminMsgState({
+        type: "success",
+        text: `Utilisateur "${editUserName.trim() || editUserEmail.trim()}" mis à jour avec succès !`,
+      });
+      setEditingUser(null);
+    } catch (e: any) {
+      setEditUserError(e?.message || "Erreur lors de la modification de l'utilisateur.");
+    } finally {
+      setEditUserLoading(false);
+    }
+  };
+
+  const handleDeleteUserByAdmin = async (targetUserId: string, targetUserName: string) => {
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement le compte de ${targetUserName} ? Cette action est irréversible.`)) {
+      return;
+    }
+    try {
+      await deleteUserByAdmin(targetUserId);
+      setAdminUsersList((prev) => prev.filter((u) => u.id !== targetUserId));
+      setAdminMsgState({ type: "success", text: "Compte utilisateur supprimé avec succès." });
+      loadData();
+    } catch (e: any) {
+      setAdminMsgState({ type: "error", text: e?.message || "Erreur lors de la suppression du compte." });
     }
   };
 
@@ -2020,6 +2158,22 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
                 />
               </Group>
 
+              {/* Profile Management */}
+              <Tooltip label="Mon Profil">
+                <ActionIcon variant="light" color="blue" size="lg" radius="md" onClick={handleOpenProfileModal}>
+                  <IconUser size={20} />
+                </ActionIcon>
+              </Tooltip>
+
+              {/* Admin Panel (visible if ADMIN) */}
+              {user?.role === "ADMIN" && (
+                <Tooltip label="Administration des Utilisateurs">
+                  <ActionIcon variant="light" color="grape" size="lg" radius="md" onClick={handleOpenAdminModal}>
+                    <IconShieldCheck size={20} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+
               {/* Passkey Management */}
               <Tooltip label="Gérer mes Passkeys / Clés de Sécurité">
                 <ActionIcon variant="light" color="teal" size="lg" radius="md" onClick={handleOpenPasskeyModal}>
@@ -2028,8 +2182,8 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
               </Tooltip>
 
               {/* AD Logout */}
-              <Tooltip label="Déconnexion (AD)">
-                <ActionIcon variant="subtle" color="red" size="lg" radius="md" onClick={() => signOut({ callbackUrl: "/login" })}>
+              <Tooltip label="Déconnexion">
+                <ActionIcon variant="subtle" color="red" size="lg" radius="md" onClick={() => signOut({ callbackUrl: "/login?logout=true" })}>
                   <IconLogout size={20} />
                 </ActionIcon>
               </Tooltip>
@@ -4672,6 +4826,218 @@ export default function DashboardClient({ initialWallets, initialWalletId, user 
           <Button color="teal" fullWidth onClick={handleSaveEnvelope}>
             Enregistrer l'Enveloppe
           </Button>
+        </Stack>
+      </Modal>
+
+      {/* Modal Mon Profil */}
+      <Modal
+        opened={profileModalOpened}
+        onClose={() => setProfileModalOpened(false)}
+        title="Mon Profil Utilisateur"
+        centered
+        size="md"
+        closeOnClickOutside={false}
+      >
+        <Stack gap="md">
+          {profileMsgState && (
+            <Alert
+              icon={profileMsgState.type === "error" ? <IconAlertCircle size={16} /> : <IconCheck size={16} />}
+              color={profileMsgState.type === "error" ? "red" : "teal"}
+              variant="light"
+            >
+              {profileMsgState.text}
+            </Alert>
+          )}
+
+          <Group gap="xs" align="center">
+            <Badge color={user?.role === "ADMIN" ? "red" : "blue"} variant="filled">
+              Rôle : {user?.role || "USER"}
+            </Badge>
+          </Group>
+
+          <TextInput
+            label="Nom complet"
+            placeholder="ex: Jean Dupont"
+            value={profileName}
+            onChange={(e) => setProfileName(e.target.value)}
+          />
+
+          <TextInput
+            label="Adresse e-mail (Identifiant de connexion)"
+            placeholder="email@exemple.com"
+            value={profileEmail}
+            onChange={(e) => setProfileEmail(e.target.value)}
+          />
+
+          <Button color="blue" fullWidth loading={profileLoadingState} onClick={handleSaveProfile}>
+            Enregistrer les modifications
+          </Button>
+        </Stack>
+      </Modal>
+
+      {/* Modal Administration des Utilisateurs */}
+      <Modal
+        opened={adminModalOpened}
+        onClose={() => setAdminModalOpened(false)}
+        title="Administration des Utilisateurs"
+        centered
+        size="50%"
+        closeOnClickOutside={false}
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Gérez l'ensemble des comptes utilisateurs enregistrés, leurs rôles et leurs modes d'accès.
+          </Text>
+
+          {adminMsgState && (
+            <Alert
+              icon={adminMsgState.type === "error" ? <IconAlertCircle size={16} /> : <IconCheck size={16} />}
+              color={adminMsgState.type === "error" ? "red" : "teal"}
+              variant="light"
+            >
+              {adminMsgState.text}
+            </Alert>
+          )}
+
+          <TextInput
+            placeholder="Rechercher un utilisateur (nom, e-mail)..."
+            leftSection={<IconSearch size={16} />}
+            value={adminSearchQuery}
+            onChange={(e) => setAdminSearchQuery(e.target.value)}
+          />
+
+          {adminLoadingState ? (
+            <Center py="xl">
+              <Loader color="grape" type="dots" />
+            </Center>
+          ) : (
+            <Table style={{ backgroundColor: "#121829", borderRadius: 8 }}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Utilisateur</Table.Th>
+                  <Table.Th>E-mail</Table.Th>
+                  <Table.Th>Rôle</Table.Th>
+                  <Table.Th>Connexions Liées</Table.Th>
+                  <Table.Th style={{ textAlign: "right" }}>Actions</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {adminUsersList
+                  .filter(
+                    (u) =>
+                      !adminSearchQuery ||
+                      (u.name || "").toLowerCase().includes(adminSearchQuery.toLowerCase()) ||
+                      (u.email || "").toLowerCase().includes(adminSearchQuery.toLowerCase())
+                  )
+                  .map((u) => (
+                    <Table.Tr key={u.id}>
+                      <Table.Td fw={600}>
+                        <Group gap={6}>
+                          {u.role === "ADMIN" ? <IconCrown size={16} color="#ff6b6b" /> : <IconUser size={16} color="#74c0fc" />}
+                          <Text size="sm" c="white">{u.name || "Inconnu"}</Text>
+                        </Group>
+                      </Table.Td>
+                      <Table.Td style={{ color: "rgba(255,255,255,0.7)" }}>{u.email}</Table.Td>
+                      <Table.Td>
+                        <Badge color={u.role === "ADMIN" ? "red" : "blue"} variant="filled" size="sm">
+                          {u.role}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={4}>
+                          {u.hasPassword && <Badge size="xs" color="gray" variant="light">Local</Badge>}
+                          {u.providers.map((pr: string) => (
+                            <Badge key={pr} size="xs" color="cyan" variant="filled">{pr}</Badge>
+                          ))}
+                          {u.passkeyCount > 0 && <Badge size="xs" color="teal" variant="light">Passkey ({u.passkeyCount})</Badge>}
+                        </Group>
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "right" }}>
+                        <Group gap={6} justify="flex-end">
+                          <Tooltip label="Modifier les informations de l'utilisateur">
+                            <ActionIcon
+                              color="blue"
+                              variant="subtle"
+                              onClick={() => handleStartEditUser(u)}
+                            >
+                              <IconPencil size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color={u.role === "ADMIN" ? "orange" : "teal"}
+                            onClick={() => handleToggleUserRole(u.id, u.role)}
+                          >
+                            {u.role === "ADMIN" ? "Passer USER" : "Passer ADMIN"}
+                          </Button>
+                          {u.id !== user?.id && (
+                            <Tooltip label="Supprimer définitivement cet utilisateur">
+                              <ActionIcon
+                                color="red"
+                                variant="subtle"
+                                onClick={() => handleDeleteUserByAdmin(u.id, u.name || u.email)}
+                              >
+                                <IconTrash size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Stack>
+      </Modal>
+
+      {/* Modal d'édition d'un utilisateur par l'Admin */}
+      <Modal
+        opened={Boolean(editingUser)}
+        onClose={() => setEditingUser(null)}
+        title={`Modifier l'utilisateur : ${editingUser?.name || editingUser?.email || ""}`}
+        centered
+        size="md"
+        closeOnClickOutside={false}
+      >
+        <Stack gap="md">
+          {editUserError && (
+            <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
+              {editUserError}
+            </Alert>
+          )}
+
+          <TextInput
+            label="Nom d'affichage"
+            placeholder="Jean Dupont"
+            value={editUserName}
+            onChange={(e) => setEditUserName(e.target.value)}
+          />
+
+          <TextInput
+            label="Adresse E-mail"
+            placeholder="utilisateur@exemple.com"
+            value={editUserEmail}
+            onChange={(e) => setEditUserEmail(e.target.value)}
+          />
+
+          <PasswordInput
+            label="Nouveau mot de passe (optionnel)"
+            placeholder="Laisser vide pour ne pas modifier"
+            description="Permet de définir ou réinitialiser le mot de passe de connexion locale."
+            value={editUserPassword}
+            onChange={(e) => setEditUserPassword(e.target.value)}
+          />
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="default" onClick={() => setEditingUser(null)}>
+              Annuler
+            </Button>
+            <Button color="blue" loading={editUserLoading} onClick={handleSaveUserByAdmin}>
+              Enregistrer les modifications
+            </Button>
+          </Group>
         </Stack>
       </Modal>
 
