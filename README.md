@@ -79,3 +79,15 @@ docker compose up -d --build
 L'application sera accessible sur le port **3000**.
 La base de données SQLite sera persistée dans le volume Docker nommé `my-wallet-data` (pointé vers `/app/data/dev.db` à l'intérieur du conteneur).
 Les migrations Prisma s'appliquent automatiquement à chaque démarrage du conteneur.
+
+### Secrets via fichiers (`*_FILE`)
+Toute variable d'environnement `VAR` peut être fournie via un fichier en définissant `VAR_FILE` (convention Docker secrets / Kubernetes). Au démarrage, le conteneur lit le fichier et exporte son contenu dans `VAR` (les retours à la ligne finaux sont retirés).
+```yaml
+environment:
+  - NEXTAUTH_SECRET_FILE=/run/secrets/nextauth_secret
+  - DATABASE_URL_FILE=/run/secrets/database_url
+secrets:
+  - nextauth_secret
+  - database_url
+```
+Le démarrage échoue si `VAR` (non vide) et `VAR_FILE` sont définis en même temps, ou si le fichier est introuvable. Les valeurs des secrets ne sont jamais affichées dans les logs (le mot de passe de `DATABASE_URL` est masqué).

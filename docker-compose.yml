@@ -47,7 +47,20 @@ services:
       - LDAP_USERNAME_ATTRIBUTE=${LDAP_USERNAME_ATTRIBUTE:-sAMAccountName}
       - LDAP_BIND_DN=${LDAP_BIND_DN:-}
       - LDAP_BIND_PASSWORD=${LDAP_BIND_PASSWORD:-}
+      # Secrets via fichiers : toute variable VAR peut être fournie via VAR_FILE.
+      # Retirer alors la variable VAR correspondante ci-dessus (ou la laisser vide).
+      # - NEXTAUTH_SECRET_FILE=/run/secrets/nextauth_secret
+      # - DATABASE_URL_FILE=/run/secrets/database_url
+#    secrets:
+#      - nextauth_secret
+#      - database_url
 #    restart: always
+
+#secrets:
+#  nextauth_secret:
+#    file: ./secrets/nextauth_secret.txt
+#  database_url:
+#    file: ./secrets/database_url.txt
 
 volumes:
   postgres-data:

@@ -2,6 +2,15 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.6.1] - 2026-11-09
+
+### 🔒 Sécurité & Secrets Docker
+* **Masquage de `DATABASE_URL` dans les logs** : Le mot de passe de la connection string n'est plus affiché en clair au démarrage du conteneur (`postgresql://user:****@host:5432/db`), y compris lorsqu'il contient des caractères spéciaux (`@`, `:`).
+* **Support des variables fichiers (`*_FILE`)** : Toute variable d'environnement `VAR` peut désormais être fournie via un fichier avec `VAR_FILE` (convention Docker secrets / Kubernetes), par ex. `NEXTAUTH_SECRET_FILE=/run/secrets/nextauth_secret` ou `DATABASE_URL_FILE=/run/secrets/database_url`.
+  * Le démarrage échoue explicitement si `VAR` (non vide) et `VAR_FILE` sont définis simultanément, ou si le fichier est introuvable / illisible.
+  * Les retours à la ligne finaux du fichier sont retirés et la valeur du secret n'est jamais journalisée.
+* **Documentation** : Exemple de configuration `secrets:` commenté dans `docker-compose.yml` et nouvelle section « Secrets via fichiers » dans le README.
+
 ## [v1.6.0] - 2026-09-09
 
 ### 🛡️ Support Authentification OIDC / Authentik & Choix du Mode d'Authentification (`AUTH_MODE`)
