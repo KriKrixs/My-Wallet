@@ -45,6 +45,46 @@ async function checkLdapReachability(ldapUrlStr: string): Promise<{ ok: boolean;
   }
 }
 
+async function checkOidcIssuer(issuer: string): Promise<{ ok: boolean; error?: string }> {
+  const discoveryUrl = `${issuer.trim().replace(/\/+$/, "")}/.well-known/openid-configuration`;
+  const timeout = 3000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(discoveryUrl, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+
+    if (res.status !== 200) {
+      return { ok: false, error: `Émetteur OIDC injoignable : HTTP ${res.status} sur ${discoveryUrl}` };
+    }
+
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      return { ok: false, error: `Réponse OIDC invalide (JSON attendu) sur ${discoveryUrl}` };
+    }
+
+    if (!body || typeof body !== "object" || !("issuer" in body) || !(body as { issuer?: unknown }).issuer) {
+      return { ok: false, error: `Configuration OIDC invalide (champ "issuer" absent) sur ${discoveryUrl}` };
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { ok: false, error: `Timeout (${timeout} ms) lors de l'appel à l'émetteur OIDC ${discoveryUrl}` };
+    }
+    const cause = err?.cause?.message || err?.cause?.code || err?.message || "erreur inconnue";
+    return { ok: false, error: `Impossible de joindre l'émetteur OIDC ${discoveryUrl} : ${cause}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function GET() {
   const timestamp = new Date().toISOString();
   let dbStatus: { status: "ok" | "error"; error?: string } = { status: "ok" };
@@ -122,7 +162,7 @@ export async function GET() {
         error: "OIDC est activé mais OIDC_ISSUER n'est pas renseigné.",
       };
     } else {
-      const oidcCheck = await checkLdapReachability(oidcIssuer);
+      const oidcCheck = await checkOidcIssuer(oidcIssuer);
       if (!oidcCheck.ok) {
         isHealthy = false;
         oidcStatus = {
