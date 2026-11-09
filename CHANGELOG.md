@@ -2,6 +2,13 @@
 
 Toutes les modifications notables apportées au projet **MyWallet** seront consignées dans ce fichier.
 
+## [v1.6.2] - 2026-11-09
+
+### 🏥 Correctif du Contrôle de Santé OIDC (`/health`)
+* **Vérification OIDC dédiée** : Le contrôle de santé OIDC ne réutilise plus le test de joignabilité LDAP. Auparavant, une URL `https://…:443` perdait son port lors du parsing et le test se rabattait sur le port LDAP `389`, provoquant un `503` (`ECONNREFUSED …:389`) et le passage du conteneur en `unhealthy` alors qu'Authentik était fonctionnel.
+* **Découverte OpenID Connect** : Nouvelle fonction `checkOidcIssuer` qui interroge `<OIDC_ISSUER>/.well-known/openid-configuration` (timeout de 3 s, sans cache) et valide une réponse `200` contenant le champ `issuer`.
+* **Messages d'erreur explicites** : En cas d'échec, `/health` et `/api/health` renvoient un `503` précisant l'URL appelée et la cause (code HTTP, JSON invalide, champ `issuer` absent, timeout ou erreur réseau).
+
 ## [v1.6.1] - 2026-11-09
 
 ### 🔒 Sécurité & Secrets Docker
